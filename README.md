@@ -1,3 +1,1 @@
-# ExamSentinel
-
-It is my FYP.
+First commit.
