@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ExamSentinel - Secure Exam Desktop Browser with Stealth VM Detection
 
 A comprehensive Final Year Project designed to detect cheating during remote exams through advanced security monitoring and stealth/hardened virtual machine detection using heuristic triangulation.
@@ -131,3 +132,6 @@ Final Score = (CPU × 0.40) + (Thermal × 0.35) + (Hardware × 0.25)
 10. **System sends** final logs and VM results
 11. **Server processes** and stores all data
 12. **Proctors review** logs and VM detection results
+=======
+dummy change.
+>>>>>>> 01a8287 (commit email issues)
