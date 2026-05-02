@@ -2,6 +2,7 @@
 
 A comprehensive Final Year Project designed to detect cheating during remote exams through advanced security monitoring and stealth/hardened virtual machine detection using heuristic triangulation.
 
+
 ## 📋 Project Overview
 
 **ExamSentinel** is a dual-component system:
