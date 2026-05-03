@@ -16,6 +16,8 @@ from flask import Flask, jsonify
 from .config import Config, ConfigError
 from .extensions import cors, db, jwt, migrate
 from .routes.auth import auth_bp
+from .routes.courses import courses_bp
+from .routes.departments import departments_bp, users_bp
 from .routes.diag import diag_bp
 from .routes.health import health_bp
 from .utils.responses import make_error_response
@@ -84,6 +86,11 @@ def _register_blueprints(app: Flask, config_class: Type[Config]) -> None:
     # together with ``app/routes/diag.py`` once the role decorators have
     # been verified by Part 8 of the build plan.
     app.register_blueprint(diag_bp, url_prefix=f"{prefix}/_diag")
+    # Departments and users endpoints
+    app.register_blueprint(departments_bp, url_prefix=f"{prefix}/departments")
+    app.register_blueprint(users_bp, url_prefix=f"{prefix}/users")
+    # Courses and enrollments endpoints
+    app.register_blueprint(courses_bp, url_prefix=f"{prefix}/courses")
 
 
 def _register_jwt_callbacks() -> None:
