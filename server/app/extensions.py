@@ -11,6 +11,7 @@ from __future__ import annotations
 import sqlite3
 
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import event
@@ -27,6 +28,13 @@ migrate = Migrate()
 # CORS is configured per-app inside the factory so origins can be derived
 # from the runtime config rather than baked in here.
 cors = CORS()
+
+# Flask-JWT-Extended manager. The identity callback, additional-claims
+# callback, and error handlers are bound to this instance inside the
+# application factory (see ``app/__init__.py``). Tokens are HS256-signed
+# with ``JWT_SECRET_KEY`` and expire twelve hours after issuance per
+# ``docs/API.md`` §1.3.
+jwt = JWTManager()
 
 
 @event.listens_for(Engine, "connect")

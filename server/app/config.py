@@ -8,6 +8,7 @@ application factory via ``app.config.from_object(Config)``.
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 from pathlib import Path
 from typing import List
 
@@ -73,6 +74,20 @@ class Config:
     # --- Secrets ----------------------------------------------------------
     SECRET_KEY: str | None = os.environ.get("SECRET_KEY")
     JWT_SECRET_KEY: str | None = os.environ.get("JWT_SECRET_KEY")
+
+    # --- JWT --------------------------------------------------------------
+    # Twelve-hour access-token lifetime per docs/API.md §1.3. The value is
+    # surfaced as both a ``timedelta`` (consumed by Flask-JWT-Extended) and
+    # an integer seconds constant (echoed back to clients in the
+    # ``expires_in`` field of /auth/login).
+    JWT_ACCESS_TOKEN_SECONDS: int = 12 * 60 * 60  # 43200
+    JWT_ACCESS_TOKEN_EXPIRES: timedelta = timedelta(seconds=JWT_ACCESS_TOKEN_SECONDS)
+    # The auth blueprint relies on the standard Authorization: Bearer
+    # header transport; cookies and query-string tokens are intentionally
+    # disabled.
+    JWT_TOKEN_LOCATION: List[str] = ["headers"]
+    JWT_HEADER_NAME: str = "Authorization"
+    JWT_HEADER_TYPE: str = "Bearer"
 
     # --- Database ---------------------------------------------------------
     SQLALCHEMY_DATABASE_URI: str = _resolve_database_uri(
