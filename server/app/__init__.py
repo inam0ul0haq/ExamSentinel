@@ -8,6 +8,7 @@ this skeleton wires only configuration, extensions, and the health check.
 
 from __future__ import annotations
 
+import os
 from typing import Type
 
 from flask import Flask, jsonify
@@ -15,6 +16,15 @@ from flask import Flask, jsonify
 from .config import Config, ConfigError
 from .extensions import cors, db, migrate
 from .routes.health import health_bp
+
+
+# Absolute path to ``server/migrations``. Resolving it from the package
+# location (rather than from cwd) lets ``flask --app server.wsgi db ...``
+# find the alembic scripts whether the caller runs from the repo root
+# (Railway release phase) or from ``server/`` (local development).
+_MIGRATIONS_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), os.pardir, "migrations")
+)
 
 
 def create_app(config_class: Type[Config] = Config) -> Flask:
@@ -44,9 +54,11 @@ def _init_extensions(app: Flask, config_class: Type[Config]) -> None:
     from . import models  # noqa: F401
 
     db.init_app(app)
-    # Alembic migrations live at ``server/migrations``; flask-migrate picks
-    # the directory up automatically when invoked from the server folder.
-    migrate.init_app(app, db)
+    # Bind alembic to the absolute ``server/migrations`` path so the
+    # Railway release phase (``flask --app server.wsgi db upgrade``)
+    # finds the scripts when invoked from the repository root, and
+    # local invocations from ``server/`` keep working unchanged.
+    migrate.init_app(app, db, directory=_MIGRATIONS_DIR)
 
     origins = config_class.CORS_ALLOWED_ORIGINS
     cors.init_app(

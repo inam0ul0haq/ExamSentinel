@@ -35,7 +35,10 @@ if errorlevel 1 (
 
 echo [dev] Installing dependencies ...
 python -m pip install --disable-pip-version-check --upgrade pip >nul
-python -m pip install -r requirements.txt
+REM requirements.txt lives at the repo root (alongside Procfile and
+REM runtime.txt) so Railway's Nixpacks builder detects this as a
+REM Python project. dev.bat reaches up one level to use it.
+python -m pip install -r ..\requirements.txt
 if errorlevel 1 (
     echo [dev] Dependency install failed.
     exit /b 1
