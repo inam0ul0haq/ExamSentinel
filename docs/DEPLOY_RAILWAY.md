@@ -12,19 +12,19 @@ This document walks through provisioning the ExamSentinel API on [Railway](https
 You need:
 
 - A Railway account (free tier is sufficient for the initial bring-up; upgrade once you onboard real students).
-- Push access to the GitHub repository hosting this codebase, with the `main` branch in the state you want deployed.
-- A terminal with `python` available locally — only used to **generate** the secrets you will paste into Railway.
-- Optionally `psql` on your machine for the smoke test in §8. Not required if you use Railway's built-in query console.
+- Push access to the GitHub repository hosting this codebase, with the `main` branch in the state you want deployed. **Before starting, verify the branch contains** `Procfile`, `runtime.txt`, `requirements.txt`, and `server/migrations/versions/*.py`. If any of those are missing from the last push, commit and push first — Railway only sees what's on the remote.
+- A terminal with `python` available locally — used to generate secrets in §3 and (if needed) to run the manual migration in §5.5.
+- Optionally `psql` on your machine for the §7 smoke test. Not required if you use Railway's built-in query console.
 
 The repository already contains every file Railway needs:
 
 | File | Purpose |
 |---|---|
-| `Procfile` | Declares the `web` and `release` processes. |
+| `Procfile` | Declares the `web` and `release` processes (at **repo root**, not `server/`). |
 | `runtime.txt` | Pins Python `3.11.x`. |
 | `requirements.txt` | Pip dependencies. |
 | `server/wsgi.py` | Exposes `app` for gunicorn and for `flask --app server.wsgi`. |
-| `server/migrations/` | Alembic scripts; `release` runs `flask db upgrade` against this directory. |
+| `server/migrations/versions/*.py` | Alembic scripts. If this folder is empty on the remote, the release phase will succeed as a no-op and no tables will ever be created — see §5.5. |
 
 You should not need to edit any of those during deploy.
 
@@ -36,9 +36,9 @@ You should not need to edit any of those during deploy.
 2. Click **New Project** in the top-right.
 3. Choose **Deploy from GitHub repo**.
 4. If this is your first time, click **Configure GitHub App** and grant Railway access to the `ExamSentinel` repository. Otherwise pick the repo from the list.
-5. Railway will create a project containing one **service** (the web app) and start the first build immediately. Let it run; it will fail or stall partway because there is no database and no secrets yet — that is expected. We will fix it in §2 and §4.
+5. Railway will create a project containing one **service** (the web app) and start the first build immediately. It **will fail** because there is no database and no secrets yet — that is expected. Don't waste time reading the traceback; just let the first deploy go red and proceed to §2. The deploy we actually care about is the one that runs automatically after §4 is saved.
 
-> **Why GitHub-driven deploys?** Every push to the configured branch (defaults to `main`) triggers a new build. There is no `railway up` step in our workflow.
+> **Why GitHub-driven deploys?** Every push to the configured branch (defaults to `main`) triggers a new build. There is no `railway up` step in our workflow. If you want to redeploy the *same* commit without pushing, use **⋯ → Redeploy** on the deploy row (see §9.1).
 
 ---
 
@@ -97,35 +97,146 @@ Run that command **twice** and keep both outputs handy — one for each variable
 
 Back in the Railway dashboard, on the **web service → Variables** tab, click **+ New Variable** for each row below.
 
+Add **all five** variables below before you walk away. Missing any one of `SECRET_KEY`, `JWT_SECRET_KEY`, or `DATABASE_URL` — or leaving `CORS_ALLOWED_ORIGINS` as `*` — causes the workers to boot-loop with a `ConfigError` (see §5.4).
+
 | Name | Value | Notes |
 |---|---|---|
-| `SECRET_KEY` | first `token_hex(64)` output | Flask session signing key. |
-| `JWT_SECRET_KEY` | second `token_hex(64)` output | Used by Flask-JWT-Extended; must differ from `SECRET_KEY`. |
-| `FLASK_ENV` | `production` | Disables the dev SQLite fallback and triggers strict validation. |
-| `CORS_ALLOWED_ORIGINS` | `*` | **Temporary.** We will tighten this once the desktop client's origin is finalised. |
-| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | Reference variable from §2.1; should already be present. |
+| `FLASK_ENV` | `production` | Disables the dev SQLite fallback and triggers strict validation. **Add this first**; the other validators only fire when `FLASK_ENV != development`. |
+| `SECRET_KEY` | first `token_hex(64)` output | Flask session signing key. **Required** when `FLASK_ENV != development`. Empty strings count as missing. |
+| `JWT_SECRET_KEY` | second `token_hex(64)` output | Used by Flask-JWT-Extended; must differ from `SECRET_KEY`. Also required. |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:1420` | **Not `*`** — the config validator rejects `*` outside development (see `server/app/config.py` `validate()`). A single origin like `http://localhost:1420` (Tauri default dev) is fine for now. **Do not put your own Railway URL here** — CORS lists the *frontends* allowed to call the API, never the API itself. Replace with the real desktop-client origin(s) once that client ships. |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | Reference variable from §2.1; should already be present. If it isn't, add it via the value field's **link icon** — do not paste the raw connection string. |
 
 `PORT` is injected automatically by Railway — do not set it yourself.
+
+All variable names are **case-sensitive and underscore-sensitive**. `SECRET-KEY`, `SecretKey`, `FLASK_SECRET_KEY`, etc. will all pass straight through the validator because none of them match `SECRET_KEY`, and gunicorn will then crash with `SECRET_KEY is required outside development.` Copy the names from this table exactly, character for character.
 
 After saving the last variable, Railway will queue a fresh deploy.
 
 ---
 
-## 5. Verify the build
+## 5. Watch the deploy — three separate log phases
 
-1. Click the **Deployments** tab on your web service.
-2. Click the most recent deploy row to open its log stream.
-3. Watch the **Build Logs** panel. You should see, in order:
-   - `Detected Python` (Nixpacks finds `runtime.txt`/`requirements.txt`).
-   - `pip install -r requirements.txt` succeeding for every package in `requirements.txt`.
-   - A green `Build successful` banner.
-4. Switch to **Deploy Logs** (same panel, second tab in newer dashboards). You should see:
-   - `Running release: flask --app server.wsgi db upgrade`
-   - `INFO [alembic.runtime.migration] Running upgrade <none> -> 7fd62e721315, initial schema` (on the very first deploy; subsequent deploys just say `Will assume transactional DDL.` and exit immediately because the head is already applied).
-   - A line indicating the release phase completed with exit code `0`.
-   - `Starting gunicorn` followed by `Listening at: http://0.0.0.0:<port>` and worker boot lines.
+Railway's deploy has **three phases** that each emit their own log stream, shown stacked inside a single deploy row. Most first-deploy confusion comes from only reading one of them. Open the **Deployments** tab → click into the most recent deploy → and look at each phase in order.
 
-If the release phase fails, the deploy is rolled back automatically and the previous version stays live. Read the alembic traceback in the logs and fix the migration or the model on a feature branch before re-deploying.
+### 5.1 Phase 1 — Build Logs
+
+You should see, in order:
+
+- `Detected Python` (Nixpacks finds `runtime.txt` / `requirements.txt` at the repo root).
+- `pip install -r requirements.txt` succeeding for every package in `requirements.txt`.
+- A green `Build successful` banner.
+
+If this phase fails: usually a missing dependency or a Python version mismatch. Fix `requirements.txt` / `runtime.txt` on a branch and push.
+
+### 5.2 Phase 2 — Release / Pre-deploy Logs (this is where migrations run — **read carefully**)
+
+The `release:` line in `Procfile` runs `flask --app server.wsgi db upgrade` in a short-lived container **before** the web workers boot. Look for a section labelled **Pre-deploy command** or **Release Logs** (exact label varies by dashboard version; it sits between Build and Deploy).
+
+On the **first** deploy against an empty database, you must see this exact line:
+
+```
+INFO  [alembic.runtime.migration] Running upgrade  -> 7fd62e721315, initial schema
+```
+
+On **every subsequent** deploy (no new migrations), you will instead see:
+
+```
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+```
+
+…and the phase exits in under a second. No `Running upgrade` line is expected because the head revision is already applied.
+
+**If the release phase is missing entirely, empty, or says `Path doesn't exist: '/app/migrations'`**, Railway did not pick up the `release:` line from your Procfile. This happens occasionally and is fixed once, manually, in §5.3.
+
+**If the release phase succeeded but the Data tab in §7 still shows no tables**, the release ran against the wrong database (usually because `DATABASE_URL` wasn't yet visible at release time). Jump to §5.5 to bootstrap the schema manually.
+
+### 5.3 Setting the pre-deploy command explicitly (one-time, only if §5.2 didn't run)
+
+Some Railway projects do not honour the Procfile `release:` line automatically and need the command configured in the UI as well:
+
+1. Web service → **Settings** tab.
+2. Scroll to **Deploy → Pre-deploy Command** (sometimes labelled **Custom Start Command → Pre-deploy**).
+3. Paste exactly:
+   ```
+   flask --app server.wsgi db upgrade
+   ```
+4. Click **Save** (or **Apply**; wording varies). Railway will re-queue a deploy automatically.
+
+This is belt-and-braces: the Procfile already declares the same command, but Railway's UI setting takes precedence when both exist. After setting it once, §5.2's release phase will reliably appear on every future deploy.
+
+### 5.4 Phase 3 — Deploy Logs (gunicorn workers)
+
+After the release phase exits 0, you should see:
+
+- `Starting gunicorn 23.0.0`
+- `Listening at: http://0.0.0.0:<port>` (port chosen by Railway, exposed via `$PORT`)
+- `Booting worker with pid: 2` and `Booting worker with pid: 3` (two workers, per the `--workers 2` flag in `Procfile`)
+- **No** repeated `Worker exiting` / `Worker failed to boot` lines.
+
+If instead you see:
+
+```
+[ERROR] Worker (pid:2) exited with code 3
+[ERROR] Worker failed to boot.
+app.config.ConfigError: Invalid configuration:
+  - SECRET_KEY is required outside development.
+  - CORS_ALLOWED_ORIGINS='*' is forbidden outside development; set an explicit comma-separated origin list.
+```
+
+…then `server/app/config.py::Config.validate()` rejected your env vars. Fix using the table below. After saving the variables, Railway redeploys within seconds — **no rebuild is needed** because the container image hasn't changed.
+
+| Error bullet | Fix |
+|---|---|
+| `SECRET_KEY is required outside development.` | Add the `SECRET_KEY` variable (case-sensitive) with a 128-hex value from `python -c "import secrets; print(secrets.token_hex(64))"`. Empty strings count as missing. |
+| `JWT_SECRET_KEY is required outside development.` | Same as above with a **different** random value under the name `JWT_SECRET_KEY`. |
+| `CORS_ALLOWED_ORIGINS='*' is forbidden outside development; set an explicit comma-separated origin list.` | Change the value from `*` to an explicit comma-separated list, e.g. `http://localhost:1420`. |
+| `DATABASE_URL is required when FLASK_ENV is not 'development'. Set DATABASE_URL to a valid PostgreSQL connection string.` | Attach Postgres (§2), then add `DATABASE_URL` as a reference variable pointing at `${{Postgres.DATABASE_URL}}`. |
+
+### 5.5 Manual schema bootstrap — when the release phase ran but no tables appeared
+
+Sometimes Railway's release phase reports success but the Postgres Data tab in §7 stays empty. The two common causes are:
+
+- The release container didn't actually have `DATABASE_URL` injected yet (can happen on the *very first* deploy, before reference variables resolve), so it fell back to an ephemeral SQLite file that was discarded when the container exited.
+- The Procfile `release:` line was silently ignored, so `flask db upgrade` never ran.
+
+Either way, the fastest unblock is to run the migration **from your machine** against the Railway Postgres, one time, to bring the schema up to head. Future deploys will then find the head already applied and no-op correctly.
+
+**Step A — get the public Postgres URL.**
+
+1. Railway → click the **Postgres** tile (not the web service).
+2. **Variables** tab.
+3. Copy the value of **`DATABASE_PUBLIC_URL`** (not `DATABASE_URL` — that one only works from inside Railway's private network). It looks like `postgresql://postgres:XXXXX@roundhouse.proxy.rlwy.net:12345/railway`.
+
+**Step B — run `flask db upgrade` locally against that URL.**
+
+Open PowerShell in the `server/` folder. The venv there should already have Flask, SQLAlchemy, and psycopg2 installed from `..\requirements.txt`.
+
+```powershell
+# Scope these env vars to just this shell so they don't leak into other work.
+$env:DATABASE_URL        = "<paste-DATABASE_PUBLIC_URL-here>"
+$env:FLASK_ENV           = "production"
+$env:SECRET_KEY          = "any-non-empty-string-for-this-shell"
+$env:JWT_SECRET_KEY      = "any-other-non-empty-string"
+$env:CORS_ALLOWED_ORIGINS = "http://localhost:1420"
+
+.\.venv\Scripts\flask.exe --app app db current
+.\.venv\Scripts\flask.exe --app app db upgrade
+.\.venv\Scripts\flask.exe --app app db current
+```
+
+Expected:
+
+- First `db current`: prints nothing (the remote has no alembic version row yet).
+- `db upgrade`: prints `Running upgrade  -> 7fd62e721315, initial schema` and exits 0.
+- Second `db current`: prints `7fd62e721315 (head)`.
+
+**Step C — refresh Railway's Data tab.** Back in Postgres tile → **Data** → browser refresh. You should now see all 12 tables (see §7).
+
+**Step D — close the loop.** Also do §5.3 (Pre-deploy Command in Settings) if you haven't already, so the *next* migration you write ships automatically instead of needing a manual run.
+
+> **Why is it safe to set a throwaway `SECRET_KEY` in the local shell?** Because `db upgrade` never signs anything with it — it only needs to pass `Config.validate()`. The real production `SECRET_KEY` on Railway is separate and untouched.
 
 ---
 
@@ -184,6 +295,8 @@ You have two options.
    teachers
    users
    ```
+
+   **If the list is empty**, the release phase didn't actually apply the migration to this database. Go back to §5.5 and run the manual bootstrap — it takes about 90 seconds and is safe to retry.
 
 ### 7.2 `psql` against the public connection string
 
@@ -272,9 +385,10 @@ Web service → **Settings** → **Suspend Service**. Stops the workers without 
 You are done when **all** of these are true:
 
 - [ ] The Railway project shows two services in the **Available** state: the web app and Postgres.
-- [ ] The web service **Variables** tab lists `DATABASE_URL` (reference), `SECRET_KEY`, `JWT_SECRET_KEY`, `FLASK_ENV=production`, `CORS_ALLOWED_ORIGINS=*`.
-- [ ] The latest deploy's logs show `flask db upgrade` completing successfully and gunicorn listening on `$PORT` with two workers.
-- [ ] Hitting `https://<your-railway-domain>/api/v1/health` from a browser returns HTTP 200 with `"database": "postgresql"` and `"status": "ok"`.
-- [ ] Either the Railway **Data** console or `psql \dt` lists the 11 application tables plus `alembic_version`.
+- [ ] The web service **Variables** tab lists `FLASK_ENV=production`, `SECRET_KEY`, `JWT_SECRET_KEY`, `DATABASE_URL` (as a reference to `${{Postgres.DATABASE_URL}}`), and `CORS_ALLOWED_ORIGINS` set to an **explicit origin list** (not `*`, not the API's own URL).
+- [ ] The latest deploy's **Release/Pre-deploy Logs** show either `Running upgrade  -> 7fd62e721315, initial schema` (first deploy) or a clean no-op (subsequent deploys) — §5.2.
+- [ ] The latest deploy's **Deploy Logs** show `Listening at: http://0.0.0.0:<port>` and both workers stay booted with no `Worker failed to boot` lines — §5.4.
+- [ ] Hitting `https://<your-railway-domain>/api/v1/health` from a browser returns HTTP 200 with `"database": "postgresql"` and `"status": "ok"` — §6.1.
+- [ ] Either the Railway **Data** console or `psql \dt` lists the 11 application tables plus `alembic_version` — §7.
 
-If all five boxes are ticked, deploy is verified. Tighten `CORS_ALLOWED_ORIGINS` once the desktop client ships, and rotate the secrets you generated in §3 if any of them have ever been pasted somewhere insecure.
+If all six boxes are ticked, deploy is verified. Replace the placeholder `CORS_ALLOWED_ORIGINS` value with the real desktop-client origin(s) the day that client ships, and rotate the secrets you generated in §3 if any of them have ever been pasted somewhere insecure.
