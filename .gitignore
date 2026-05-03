@@ -38,3 +38,7 @@ Desktop.ini
 # PyInstaller
 *.manifest
 *.log
+
+# Local SQLite dev database (created automatically by the Flask dev server)
+server/dev.db
+server/dev.db-journal
