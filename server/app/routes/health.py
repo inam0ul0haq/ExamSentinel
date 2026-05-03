@@ -11,7 +11,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from flask import Blueprint, current_app, jsonify
+from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
+
+from ..extensions import db
 
 
 health_bp = Blueprint("health", __name__)
@@ -34,11 +37,25 @@ def _resolved_db_dialect() -> str:
 
 @health_bp.get("/health")
 def health() -> tuple:
-    """Lightweight liveness probe used by Railway and the desktop client."""
+    """Lightweight liveness probe used by Railway and the desktop client.
+
+    Runs a trivial ``SELECT 1`` against the configured database so the
+    response reflects real connectivity (and so the SQLite fallback file
+    is materialised on first hit in development).
+    """
+    dialect = _resolved_db_dialect()
+    status = "ok"
+    try:
+        db.session.execute(text("SELECT 1"))
+    except Exception as exc:  # pragma: no cover - surface real failures
+        current_app.logger.warning("health check db probe failed: %s", exc)
+        status = "degraded"
+
     payload = {
-        "status": "ok",
-        "api_version": current_app.config.get("API_VERSION", "v1"),
-        "database": _resolved_db_dialect(),
+        "status": status,
+        "version": current_app.config.get("API_VERSION", "v1"),
+        "database": dialect,
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
-    return jsonify(payload), 200
+    http_status = 200 if status == "ok" else 503
+    return jsonify(payload), http_status
