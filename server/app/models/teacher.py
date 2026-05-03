@@ -25,10 +25,15 @@ class Teacher(User):
     employee_code = Column(String(32), nullable=False, unique=True, index=True)
     # Free-form rank/title (e.g. "Assistant Professor"). Optional.
     designation = Column(String(80), nullable=True)
+    # Optional at registration time — teachers without a department on
+    # their account record are allowed; a teacher can be assigned to a
+    # department later via the admin tooling that lands in a future part.
+    # The FK still points at ``departments.id`` so any non-null value is
+    # validated by the database.
     department_id = Column(
         Integer,
         ForeignKey("departments.id"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 

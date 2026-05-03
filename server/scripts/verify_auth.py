@@ -122,7 +122,10 @@ def main() -> int:
     _show("0. health", status, body)
     _assert(status == 200, "GET /health -> 200", str(status))
 
-    # 1. Register a teacher (DoD core requirement)
+    # 1. Register a teacher *without* department_id (DoD core requirement).
+    # The teacher branch of registration must succeed when the caller
+    # omits ``department_id``, because the column is nullable for the
+    # ``teachers`` table (migration ``0ef080486833``).
     status, body = _call(
         base, "POST", "/auth/register",
         {
@@ -132,14 +135,40 @@ def main() -> int:
             "role": "teacher",
             "employee_code": t_emp,
             "designation": "Lecturer",
-            "department_id": args.department_id,
         },
     )
-    _show("1. register teacher", status, body)
-    _assert(status == 201, "POST /auth/register (teacher) -> 201", str(status))
+    _show("1. register teacher (no department_id)", status, body)
+    _assert(status == 201, "POST /auth/register (teacher, no dept) -> 201", str(status))
     _assert(
         isinstance(body, dict) and bool(body.get("access_token")),
         "register response carries access_token",
+    )
+    _assert(
+        isinstance(body, dict)
+        and body.get("user", {}).get("department_id") is None,
+        "teacher.user.department_id is null when omitted",
+    )
+
+    # 1b. Register a second teacher *with* department_id — the optional
+    # field is still validated for type and existence when supplied.
+    status, body = _call(
+        base, "POST", "/auth/register",
+        {
+            "full_name": "Test Teacher Two",
+            "email": f"teacher2_{ts}@example.com",
+            "password": password,
+            "role": "teacher",
+            "employee_code": f"{t_emp}B",
+            "designation": "Senior Lecturer",
+            "department_id": args.department_id,
+        },
+    )
+    _show("1b. register teacher (with department_id)", status, body)
+    _assert(status == 201, "POST /auth/register (teacher, with dept) -> 201", str(status))
+    _assert(
+        isinstance(body, dict)
+        and body.get("user", {}).get("department_id") == args.department_id,
+        "teacher.user.department_id reflects supplied value",
     )
 
     # 2. Login as teacher returns a JWT
@@ -253,6 +282,26 @@ def main() -> int:
     status, body = _call(base, "POST", "/auth/register", {"email": "bad"})
     _show("7. register bad body", status, body)
     _assert(status == 422, "POST /auth/register (bad body) -> 422", str(status))
+    # 7b. Teacher supplying a non-existent department_id is still rejected
+    # — the field is optional but, when supplied, must reference a real row.
+    status, body = _call(
+        base, "POST", "/auth/register",
+        {
+            "full_name": "Bad Dept Teacher",
+            "email": f"baddept_{ts}@example.com",
+            "password": password,
+            "role": "teacher",
+            "employee_code": f"BAD{ts}",
+            "designation": "Lecturer",
+            "department_id": 99999,
+        },
+    )
+    _assert(status == 422, "Teacher with bogus department_id -> 422", str(status))
+    _assert(
+        isinstance(body, dict)
+        and "department_id" in body.get("error", {}).get("details", {}),
+        "department_id error detail present for bogus id",
+    )
     _assert(
         isinstance(body, dict)
         and body.get("error", {}).get("code") == "validation_failed",

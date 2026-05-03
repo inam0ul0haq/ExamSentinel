@@ -20,12 +20,11 @@ Design notes:
   unique by appending a numeric suffix on collision. The User model
   retains the ``username`` column (per ``docs/API.md`` §2 response
   shape and the existing schema).
-* ``department_id`` is a required field for **both** roles because the
-  underlying ``teachers`` table also has ``department_id NOT NULL``
-  (see ``server/migrations/versions/7fd62e721315_initial_schema.py``).
-  The prompt mentions the field only for students; this is a forced
-  expansion to satisfy the schema. Update the migration if the schema
-  ever drops the constraint.
+* ``department_id`` is **required for students** and **optional for
+  teachers**. The schema reflects this: ``students.department_id`` is
+  ``NOT NULL`` while ``teachers.department_id`` was relaxed to
+  nullable in revision ``0ef080486833``. When a teacher does pass a
+  ``department_id`` it is still validated for type and existence.
 """
 
 from __future__ import annotations
@@ -218,7 +217,15 @@ def _validate_teacher_fields(
     errors: Dict[str, List[str]],
     cleaned: Dict[str, Any],
 ) -> None:
-    """Populate ``errors``/``cleaned`` with the teacher-only fields."""
+    """Populate ``errors``/``cleaned`` with the teacher-only fields.
+
+    ``department_id`` is **optional** for teachers (the column is
+    nullable per migration ``0ef080486833``). When the caller does
+    supply a value, we still validate it: it must be a positive integer
+    referring to an existing row. The ``cleaned`` dict only carries a
+    ``department_id`` key when the caller provided one, so the register
+    handler can distinguish "absent" from "provided as null".
+    """
     employee_code = payload.get("employee_code")
     if not isinstance(employee_code, str) or not employee_code.strip():
         errors.setdefault("employee_code", []).append(
@@ -233,13 +240,16 @@ def _validate_teacher_fields(
     else:
         cleaned["designation"] = designation.strip()
 
-    # ``department_id`` is required by the ``teachers`` table schema
-    # (NOT NULL). Even though the prompt only listed it under the
-    # student-specific block, we surface it for teacher registration too.
-    department_id = _coerce_int(payload.get("department_id"))
+    # Optional. ``None`` and the missing-key case both mean "no
+    # department on this account"; everything else must coerce to a
+    # positive integer.
+    raw_department = payload.get("department_id", None)
+    if raw_department is None:
+        return
+    department_id = _coerce_int(raw_department)
     if department_id is None or department_id <= 0:
         errors.setdefault("department_id", []).append(
-            "Department id is required and must be a positive integer."
+            "Department id, when provided, must be a positive integer."
         )
     else:
         cleaned["department_id"] = department_id
@@ -292,13 +302,15 @@ def register():
 
     # Department existence check — only after the per-field validation
     # passes, otherwise we'd be hitting the DB with a half-validated
-    # payload. ``cleaned['department_id']`` is guaranteed by the role
-    # branch above; both branches require the field.
-    department = db.session.get(Department, cleaned["department_id"])
-    if department is None:
-        return validation_error(
-            {"department_id": ["Department not found."]}
-        )
+    # payload. The student branch always populates ``department_id``;
+    # the teacher branch only populates it when the caller supplied one,
+    # so the lookup is conditional.
+    if "department_id" in cleaned:
+        department = db.session.get(Department, cleaned["department_id"])
+        if department is None:
+            return validation_error(
+                {"department_id": ["Department not found."]}
+            )
 
     email = cleaned["email"]
     full_name = cleaned["full_name"]
@@ -367,7 +379,10 @@ def register():
             full_name=full_name,
             employee_code=cleaned["employee_code"],
             designation=cleaned["designation"],
-            department_id=cleaned["department_id"],
+            # ``department_id`` is optional for teachers — pass it only
+            # when the caller supplied one. SQLAlchemy will leave the
+            # column NULL otherwise, which the schema now allows.
+            department_id=cleaned.get("department_id"),
         )
 
     user.set_password(cleaned["password"])
