@@ -317,18 +317,17 @@ def register():
 
     # Pre-flight uniqueness checks. Race conditions are still caught by
     # the IntegrityError fallback below, but checking up-front lets us
-    # return a clean ``409 conflict`` with a precise field name in the
-    # common case.
+    # return a clean ``422 validation_failed`` with a precise field name
+    # in the common case. The acceptance tests expect duplicate email to
+    # surface as a field-level validation error rather than a generic
+    # conflict.
     if (
         db.session.query(User.id)
         .filter(func.lower(User.email) == email)
         .first()
     ):
-        return error_response(
-            "conflict",
-            "An account with this email already exists.",
-            409,
-            details={"field": "email"},
+        return validation_error(
+            {"email": ["An account with this email already exists."]}
         )
 
     if role == USER_ROLE_STUDENT:
@@ -338,11 +337,8 @@ def register():
             .first()
         )
         if existing_roll:
-            return error_response(
-                "conflict",
-                "Roll number is already registered.",
-                409,
-                details={"field": "roll_number"},
+            return validation_error(
+                {"roll_number": ["Roll number is already registered."]}
             )
     else:  # teacher
         existing_emp = (
@@ -354,11 +350,8 @@ def register():
             .first()
         )
         if existing_emp:
-            return error_response(
-                "conflict",
-                "Employee code is already registered.",
-                409,
-                details={"field": "employee_code"},
+            return validation_error(
+                {"employee_code": ["Employee code is already registered."]}
             )
 
     username = _generate_unique_username(email)
@@ -392,13 +385,13 @@ def register():
         db.session.commit()
     except IntegrityError:
         # Race condition on a unique index — the pre-flight check lost
-        # to a concurrent insert. Map back to a generic 409 without
-        # leaking which column tripped the constraint.
+        # to a concurrent insert. Per the acceptance tests, we return the
+        # same ``422 validation_failed`` envelope as the pre-flight checks
+        # rather than a generic 409 conflict. The error message stays
+        # generic because we don't know which constraint tripped.
         db.session.rollback()
-        return error_response(
-            "conflict",
-            "Account could not be created due to a uniqueness conflict.",
-            409,
+        return validation_error(
+            {"_": ["Account could not be created due to a uniqueness conflict."]}
         )
 
     token = create_access_token(identity=user)

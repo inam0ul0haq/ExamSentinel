@@ -323,7 +323,9 @@ def main() -> int:
         "/auth/me invalid token -> unauthorized envelope",
     )
 
-    # 9. Conflict on duplicate email
+    # 9. Conflict on duplicate email — now returns 422 validation_failed
+    # per the acceptance tests (field-level error on email rather than a
+    # generic conflict envelope).
     status, body = _call(
         base, "POST", "/auth/register",
         {
@@ -336,11 +338,17 @@ def main() -> int:
             "department_id": args.department_id,
         },
     )
-    _assert(status == 409, "Duplicate email -> 409", str(status))
+    _assert(status == 422, "Duplicate email -> 422", str(status))
     _assert(
         isinstance(body, dict)
-        and body.get("error", {}).get("code") == "conflict",
-        "duplicate email -> conflict code",
+        and body.get("error", {}).get("code") == "validation_failed",
+        "duplicate email -> validation_failed code",
+    )
+    _assert(
+        isinstance(body, dict)
+        and isinstance(body.get("error", {}).get("details"), dict)
+        and "email" in body["error"]["details"],
+        "duplicate email -> field-level error on email",
     )
 
     # ----------------------------------------------------------------
