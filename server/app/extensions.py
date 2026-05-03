@@ -8,13 +8,17 @@ circular imports between ``app/__init__.py`` and modules that need ``db``
 
 from __future__ import annotations
 
+import sqlite3
+
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
 
-# Single SQLAlchemy instance shared across the app. Models will attach to
-# ``db.Model`` in Part 6; this skeleton creates the instance only.
+# Single SQLAlchemy instance shared across the app. Models attach to
+# ``db.Model`` from their own modules under ``app/models/``.
 db = SQLAlchemy()
 
 # Alembic-backed migration manager. ``migrations/`` lives at server/migrations.
@@ -23,3 +27,22 @@ migrate = Migrate()
 # CORS is configured per-app inside the factory so origins can be derived
 # from the runtime config rather than baked in here.
 cors = CORS()
+
+
+@event.listens_for(Engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+    """Enable foreign-key enforcement for SQLite connections.
+
+    SQLite ships with FK constraints **disabled** by default — every
+    new connection has to issue ``PRAGMA foreign_keys = ON`` before
+    ``ON DELETE CASCADE`` clauses do anything. Without this hook the
+    SQLite dev fallback would silently leave orphaned rows after a
+    parent delete, masking real cascade bugs that PostgreSQL would
+    catch in production.
+
+    The hook is a no-op for non-SQLite connections.
+    """
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()

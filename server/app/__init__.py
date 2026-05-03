@@ -37,6 +37,12 @@ def create_app(config_class: Type[Config] = Config) -> Flask:
 def _init_extensions(app: Flask, config_class: Type[Config]) -> None:
     """Bind SQLAlchemy, Migrate, and CORS to the app."""
 
+    # Side-effect import: registers every model class with ``db.metadata``
+    # so Flask-Migrate autogenerate and ``db.create_all()`` see the full
+    # schema. Done before ``init_app`` for clarity; order is irrelevant
+    # because models only reference ``db`` at class-definition time.
+    from . import models  # noqa: F401
+
     db.init_app(app)
     # Alembic migrations live at ``server/migrations``; flask-migrate picks
     # the directory up automatically when invoked from the server folder.
