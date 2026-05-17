@@ -397,7 +397,48 @@ sequenceDiagram
 
 ---
 
-## 6. Technology Rationale
+## 6. UI Theme
+
+The client uses a manually styled dark palette defined in `client/app/ui/theme.py`. All screens and widgets reference these constants — no CSS, no third-party theme engines.
+
+### 6.1 Colour Palette
+
+| Token | Hex | Usage |
+|---|---|---|
+| `BG_PRIMARY` | `#0A0E1A` | Root window / page background (deep navy) |
+| `BG_SECONDARY` | `#141929` | Cards, panels, toast background |
+| `BG_INPUT` | `#1A2036` | Entry fields, text areas |
+| `ACCENT` | `#4E7AFF` | Primary action buttons, links (vivid blue) |
+| `ACCENT_HOVER` | `#6B91FF` | Hover state for accent elements |
+| `TEXT_PRIMARY` | `#E8ECF4` | Headings, body copy (off-white) |
+| `TEXT_SECONDARY` | `#8B92A8` | Labels, hints (muted lavender-grey) |
+| `TEXT_PLACEHOLDER` | `#5C6280` | Placeholder text inside inputs |
+| `BORDER` | `#2A3150` | Card / input borders |
+| `SUCCESS` | `#2DD4A8` | Success toasts, check marks (green-teal) |
+| `ERROR` | `#FF4D6A` | Error toasts, validation (coral-red) |
+| `WARNING` | `#FFB020` | Warning messages (amber) |
+
+### 6.2 Typography
+
+| Token | Value | Usage |
+|---|---|---|
+| `FONT_HEADING` | Segoe UI 20 bold | Page titles |
+| `FONT_SUBHEADING` | Segoe UI 14 bold | Section headers |
+| `FONT_BODY` | Segoe UI 12 | Body text, inputs |
+| `FONT_SMALL` | Segoe UI 10 | Captions, toasts |
+| `FONT_BUTTON` | Segoe UI 12 bold | Button labels |
+
+### 6.3 Spacing
+
+| Token | Pixels | Usage |
+|---|---|---|
+| `PAD_LARGE` | 24 | Outer page margins, section gaps |
+| `PAD_MEDIUM` | 16 | Inner card padding, button padding |
+| `PAD_SMALL` | 8 | Tight gaps, inline spacing |
+
+---
+
+## 7. Technology Rationale
 
 ### Why Flask?
 Flask is lightweight, well-understood, and sufficient for a REST API of this scope. It avoids the ceremony of larger frameworks while providing the extension ecosystem (Flask-JWT-Extended, Flask-Migrate) needed for auth and schema evolution. The team can reason about every line of request handling.

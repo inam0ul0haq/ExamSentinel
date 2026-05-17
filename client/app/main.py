@@ -1,0 +1,72 @@
+"""
+ExamSentinel — client entry point.
+
+Creates the root Tk window, instantiates core services, registers all
+screens, and navigates to the splash screen.
+
+Run with:  python -m client.app.main
+"""
+
+from __future__ import annotations
+
+import tkinter as tk
+
+from client.app.ui import theme
+from client.app.services.api_client import ApiClient
+from client.app.services.session_state import SessionState
+from client.app.services.router import Router
+
+# Screen imports
+from client.app.screens.splash import SplashScreen
+
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+APP_TITLE = "ExamSentinel"
+WINDOW_WIDTH = 1100
+WINDOW_HEIGHT = 720
+
+
+def _centre_window(root: tk.Tk, w: int, h: int) -> None:
+    """Position *root* at the centre of the primary monitor."""
+    root.update_idletasks()
+    screen_w = root.winfo_screenwidth()
+    screen_h = root.winfo_screenheight()
+    x = (screen_w - w) // 2
+    y = (screen_h - h) // 2
+    root.geometry(f"{w}x{h}+{x}+{y}")
+
+
+def main() -> None:
+    root = tk.Tk()
+    root.title(APP_TITLE)
+    root.configure(bg=theme.BG_PRIMARY)
+    root.resizable(False, False)
+    _centre_window(root, WINDOW_WIDTH, WINDOW_HEIGHT)
+
+    # --- core services (accessible from screens via router / app) ----------
+    api_client = ApiClient()
+    session_state = SessionState()
+
+    # Wire logout → clear token
+    session_state.on_logout(api_client.clear_token)
+
+    # --- router & screen registration -------------------------------------
+    router = Router(root)
+
+    # Attach services to the router so screens can reach them.
+    router.api = api_client          # type: ignore[attr-defined]
+    router.session = session_state   # type: ignore[attr-defined]
+
+    router.register("splash", SplashScreen)
+
+    # --- navigate to initial screen ----------------------------------------
+    router.show("splash", push=False)
+
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
