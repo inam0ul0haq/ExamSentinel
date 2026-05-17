@@ -240,7 +240,7 @@ if session_id:
 else:
     print("  [SKIP] No session_id for grading test")
 
-# ── 6. _diag routes removed ──
+# ── 6. _diag routes removed ──-
 section("6. _diag routes removed")
 if teacher_token:
     r = requests.get(f"{BASE}/_diag/teacher-only", headers=headers_t, timeout=15)
