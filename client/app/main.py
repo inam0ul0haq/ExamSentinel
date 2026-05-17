@@ -18,6 +18,10 @@ from client.app.services.router import Router
 
 # Screen imports
 from client.app.screens.splash import SplashScreen
+from client.app.screens.login import LoginScreen
+from client.app.screens.register import RegisterScreen
+from client.app.screens.teacher_dashboard import TeacherDashboardScreen
+from client.app.screens.student_dashboard import StudentDashboardScreen
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +65,10 @@ def main() -> None:
     router.session = session_state   # type: ignore[attr-defined]
 
     router.register("splash", SplashScreen)
+    router.register("login", LoginScreen)
+    router.register("register", RegisterScreen)
+    router.register("teacher_dashboard", TeacherDashboardScreen)
+    router.register("student_dashboard", StudentDashboardScreen)
 
     # --- navigate to initial screen ----------------------------------------
     router.show("splash", push=False)
