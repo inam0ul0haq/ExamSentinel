@@ -19,7 +19,9 @@ from .routes.auth import auth_bp
 from .routes.courses import courses_bp
 from .routes.departments import departments_bp, users_bp
 from .routes.diag import diag_bp
+from .routes.exams import exams_bp
 from .routes.health import health_bp
+from .routes.sessions import sessions_bp
 from .utils.responses import make_error_response
 
 
@@ -91,6 +93,9 @@ def _register_blueprints(app: Flask, config_class: Type[Config]) -> None:
     app.register_blueprint(users_bp, url_prefix=f"{prefix}/users")
     # Courses and enrollments endpoints
     app.register_blueprint(courses_bp, url_prefix=f"{prefix}/courses")
+    # Exams and sessions endpoints
+    app.register_blueprint(exams_bp, url_prefix=prefix)
+    app.register_blueprint(sessions_bp, url_prefix=prefix)
 
 
 def _register_jwt_callbacks() -> None:
