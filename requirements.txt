@@ -12,3 +12,4 @@ gunicorn==23.0.0
 marshmallow==3.23.2
 marshmallow-sqlalchemy==1.4.0
 pytest==8.3.4
+Faker==30.8.2

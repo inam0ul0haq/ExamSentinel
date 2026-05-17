@@ -298,6 +298,11 @@ def main() -> int:
     session_id = body.get("id")
     _assert(bool(session_id), "Session id extracted")
 
+    # Extract question IDs from session body
+    questions_list = body.get("questions", []) if isinstance(body, dict) else []
+    q1_id = questions_list[0].get("id") if len(questions_list) > 0 else None
+    q2_id = questions_list[1].get("id") if len(questions_list) > 1 else None
+
     # --------------------------------------------------------------------
     # Test 7: Transition to in_progress
     # --------------------------------------------------------------------
@@ -330,7 +335,7 @@ def main() -> int:
     status, body = _call(
         base,
         "PUT",
-        f"/sessions/{session_id}/answers/1",
+        f"/sessions/{session_id}/answers/{q1_id}",
         {"answer_text": "4"},
         token=student_token,
     )
@@ -340,7 +345,7 @@ def main() -> int:
     status, body = _call(
         base,
         "PUT",
-        f"/sessions/{session_id}/answers/2",
+        f"/sessions/{session_id}/answers/{q2_id}",
         {"answer_text": "Paris"},
         token=student_token,
     )

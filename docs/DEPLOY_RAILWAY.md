@@ -378,6 +378,37 @@ The release phase is **forward-only** for migrations — Alembic does not run `d
 
 Web service → **Settings** → **Suspend Service**. Stops the workers without destroying the database. Resume from the same screen.
 
+### 9.4 Running the dummy-data seed against the Railway database
+
+The backend exposes a destructive seed endpoint at `POST /api/v1/_seed`. It wipes every application table in dependency order and regenerates a demoable PUCIT-shaped dataset (2 departments, 3 teachers, 6 courses, 30 students, 12 exams with 10 questions each — see `server/seed/generator.py`).
+
+**Gate.** The endpoint reads the `SEED_TOKEN` environment variable. Requests without a matching `X-Seed-Token` header receive `404 not_found` so the route is unreachable without the token — no 401 / 403 signal is emitted, which prevents callers from confirming the endpoint exists by probing.
+
+**Provisioning the token on Railway.**
+
+1. Generate a long random token locally:
+
+   ```powershell
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+
+2. In Railway → web service → **Variables** → **+ New Variable** add `SEED_TOKEN=<paste-the-value>`. Save and wait for the automatic redeploy to finish.
+3. Confirm `SEED_TOKEN` is listed next to the other secrets (`SECRET_KEY`, `JWT_SECRET_KEY`, etc.).
+
+**Running the seed.** With the redeploy live, send the request from your laptop (no JWT is required — only the header):
+
+```powershell
+curl.exe -X POST `
+  -H "X-Seed-Token: <paste-the-value>" `
+  https://<your-railway-domain>/api/v1/_seed
+```
+
+A successful run returns a JSON summary with table counts and a `credentials` block listing the shared password (`pass123`), the demo teacher email, and the demo student email. Log in with those credentials to validate the deploy end-to-end.
+
+**Removing the token afterwards.** If you do not want the seed endpoint reachable in the long term, delete the `SEED_TOKEN` variable on Railway and redeploy. The route will then return `404` again to every caller, including holders of the old token.
+
+> The seed wipes every row — never run it against a database that contains real student data.
+
 ---
 
 ## 10. Definition of Done checklist

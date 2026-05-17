@@ -244,9 +244,12 @@ def save_answer(session_id: int, question_id: int):
     try:
         answer = upsert_answer(session, question_id, answer_text.strip())
     except Exception as e:
-        if hasattr(e, "get_response"):
-            return e.get_response()
+        if isinstance(e, tuple):
+            return e
         raise
+
+    if isinstance(answer, tuple):
+        return answer
 
     body = {
         "id": answer.id,

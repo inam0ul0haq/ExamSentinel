@@ -158,10 +158,15 @@ def upsert_answer(session: ExamSession, question_id: int, answer_text: str) -> A
         deadline_at = deadline_at.replace(tzinfo=timezone.utc)
 
     if session.status != SESSION_STATUS_IN_PROGRESS:
-        raise error_response("bad_request", "Session is not in progress.", 400)
+        return error_response(
+            "conflict",
+            "Session is not in progress.",
+            409,
+            details={"code": "session_not_active"},
+        )
 
     if deadline_at and now > deadline_at:
-        raise error_response("bad_request", "Session has expired.", 400)
+        return error_response(
             "conflict",
             "Session has expired.",
             409,
@@ -170,13 +175,13 @@ def upsert_answer(session: ExamSession, question_id: int, answer_text: str) -> A
 
     question = db.session.get(Question, question_id)
     if question is None or question.exam_id != session.exam_id:
-        raise validation_error({"question_id": ["Question not found in this exam."]})
+        return validation_error({"question_id": ["Question not found in this exam."]})
 
     # For MCQs, validate answer is one of the options
     if question.question_type == QUESTION_TYPE_MCQ:
         options = [q for q in [question.option_a, question.option_b, question.option_c, question.option_d] if q]
         if answer_text not in options:
-            raise validation_error({"answer_text": ["Answer must be one of the options."]})
+            return validation_error({"answer_text": ["Answer must be one of the options."]})
 
     # Upsert answer
     answer = (
@@ -240,7 +245,15 @@ def submit_session(session: ExamSession) -> Dict[str, Any]:
 
         if question.question_type == QUESTION_TYPE_MCQ:
             total_mcq_marks += question.marks
-            if answer and answer.answer_text == question.correct_option:
+            # Map correct_option letter to option text for comparison
+            option_map = {
+                "A": question.option_a,
+                "B": question.option_b,
+                "C": question.option_c,
+                "D": question.option_d,
+            }
+            correct_text = option_map.get(question.correct_option)
+            if answer and answer.answer_text == correct_text:
                 answer.marks_awarded = question.marks
                 answer.is_auto_graded = True
                 mcq_marks_awarded += question.marks
@@ -345,10 +358,17 @@ def get_session_result(session: ExamSession, user_role: str) -> Dict[str, Any]:
             item["options"] = [
                 q for q in [question.option_a, question.option_b, question.option_c, question.option_d] if q
             ]
-            item["is_correct"] = answer.answer_text == question.correct_option if answer else None
+            option_map = {
+                "A": question.option_a,
+                "B": question.option_b,
+                "C": question.option_c,
+                "D": question.option_d,
+            }
+            correct_text = option_map.get(question.correct_option)
+            item["is_correct"] = (answer.answer_text == correct_text) if answer else None
             # Only include correct_answer for teachers
             if user_role == "teacher":
-                item["correct_answer"] = question.correct_option
+                item["correct_answer"] = correct_text
         else:
             item["options"] = None
             item["is_correct"] = None

@@ -90,7 +90,13 @@ def _serialize_question(question: Question, include_correct: bool = False) -> Di
         ]
         data["options"] = options
         if include_correct:
-            data["correct_answer"] = question.correct_option
+            option_map = {
+                "A": question.option_a,
+                "B": question.option_b,
+                "C": question.option_c,
+                "D": question.option_d,
+            }
+            data["correct_answer"] = option_map.get(question.correct_option)
 
     return data
 

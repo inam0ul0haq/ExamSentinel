@@ -15,13 +15,16 @@ from flask import Flask, jsonify
 
 from .config import Config, ConfigError
 from .extensions import cors, db, jwt, migrate
+from .routes.admin_seed import admin_seed_bp
 from .routes.auth import auth_bp
 from .routes.courses import courses_bp
 from .routes.departments import departments_bp, users_bp
 from .routes.diag import diag_bp
 from .routes.exams import exams_bp
 from .routes.health import health_bp
+from .routes.incidents import incidents_bp
 from .routes.sessions import sessions_bp
+from .routes.teacher_reports import teacher_reports_bp
 from .utils.responses import make_error_response
 
 
@@ -96,6 +99,12 @@ def _register_blueprints(app: Flask, config_class: Type[Config]) -> None:
     # Exams and sessions endpoints
     app.register_blueprint(exams_bp, url_prefix=prefix)
     app.register_blueprint(sessions_bp, url_prefix=prefix)
+    # Incident ingestion (student-only, under /api/v1)
+    app.register_blueprint(incidents_bp, url_prefix=prefix)
+    # Teacher reporting (under /api/v1/teacher)
+    app.register_blueprint(teacher_reports_bp, url_prefix=f"{prefix}/teacher")
+    # Dummy data seed (gated by SEED_TOKEN header, returns 404 otherwise)
+    app.register_blueprint(admin_seed_bp, url_prefix=f"{prefix}/_seed")
 
 
 def _register_jwt_callbacks() -> None:
