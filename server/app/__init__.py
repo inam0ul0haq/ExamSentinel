@@ -19,7 +19,6 @@ from .routes.admin_seed import admin_seed_bp
 from .routes.auth import auth_bp
 from .routes.courses import courses_bp
 from .routes.departments import departments_bp, users_bp
-from .routes.diag import diag_bp
 from .routes.exams import exams_bp
 from .routes.health import health_bp
 from .routes.incidents import incidents_bp
@@ -87,10 +86,6 @@ def _register_blueprints(app: Flask, config_class: Type[Config]) -> None:
     prefix = config_class.API_PREFIX  # ``/api/v1``
     app.register_blueprint(health_bp, url_prefix=prefix)
     app.register_blueprint(auth_bp, url_prefix=f"{prefix}/auth")
-    # TODO(part_12_remove_diag_routes): drop this blueprint registration
-    # together with ``app/routes/diag.py`` once the role decorators have
-    # been verified by Part 8 of the build plan.
-    app.register_blueprint(diag_bp, url_prefix=f"{prefix}/_diag")
     # Departments and users endpoints
     app.register_blueprint(departments_bp, url_prefix=f"{prefix}/departments")
     app.register_blueprint(users_bp, url_prefix=f"{prefix}/users")
