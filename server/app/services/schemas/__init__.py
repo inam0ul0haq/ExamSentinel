@@ -106,6 +106,8 @@ class EnrollmentSchema(Schema):
     student_full_name = fields.String(required=True)
     student_email = fields.String(required=True)
     student_roll_number = fields.String(required=True)
+    student_semester = fields.Integer(allow_none=True, load_default=None)
+    student_department_name = fields.String(allow_none=True, load_default=None)
     enrolled_at = fields.DateTime(required=True)
     status = fields.String(required=True)
 

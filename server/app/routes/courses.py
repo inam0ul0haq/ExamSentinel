@@ -711,6 +711,7 @@ def list_enrollments(course_id: int):
 
     items = []
     for e in enrollments:
+        dept = e.student.department
         items.append({
             "id": e.id,
             "course_id": e.course_id,
@@ -718,7 +719,9 @@ def list_enrollments(course_id: int):
             "student_full_name": e.student.full_name,
             "student_email": e.student.email,
             "student_roll_number": e.student.roll_number,
-            "enrolled_at": e.enrolled_at.isoformat(),
+            "student_semester": e.student.semester,
+            "student_department_name": dept.name if dept else None,
+            "enrolled_at": e.enrolled_at,
             "status": str(e.status),
         })
 

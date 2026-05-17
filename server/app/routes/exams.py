@@ -600,6 +600,7 @@ def list_course_exams(course_id: int):
             "end_window": exam.end_window.isoformat() if exam.end_window else None,
             "is_active": exam.is_active,
             "question_count": len(exam.questions),
+            "total_marks": exam.total_marks,
         }
         if user.role == "teacher":
             item["questions"] = [_serialize_question(q, include_correct=True) for q in exam.questions]
