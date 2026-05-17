@@ -410,6 +410,15 @@ def get_student_active_exams(student_id: int, page: int, page_size: int) -> tupl
 
     items = []
     for exam, course in results:
+        # Look up the student's session for this exam (if any)
+        session = (
+            db.session.query(ExamSession)
+            .filter(
+                ExamSession.exam_id == exam.id,
+                ExamSession.student_id == student_id,
+            )
+            .first()
+        )
         items.append({
             "id": exam.id,
             "title": exam.title,
@@ -421,6 +430,8 @@ def get_student_active_exams(student_id: int, page: int, page_size: int) -> tupl
             "course_title": course.title,
             "course_code": course.code,
             "question_count": len(exam.questions),
+            "session_status": str(session.status) if session else None,
+            "session_id": session.id if session else None,
         })
 
     return items, total_items

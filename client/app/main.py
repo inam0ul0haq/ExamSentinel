@@ -22,6 +22,7 @@ from client.app.screens.login import LoginScreen
 from client.app.screens.register import RegisterScreen
 from client.app.screens.teacher_dashboard import TeacherDashboardScreen
 from client.app.screens.student_dashboard import StudentDashboardScreen
+from client.app.screens.exam_integrity_check import ExamIntegrityCheckScreen
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +70,7 @@ def main() -> None:
     router.register("register", RegisterScreen)
     router.register("teacher_dashboard", TeacherDashboardScreen)
     router.register("student_dashboard", StudentDashboardScreen)
+    router.register("exam_integrity_check", ExamIntegrityCheckScreen)
 
     # --- navigate to initial screen ----------------------------------------
     router.show("splash", push=False)

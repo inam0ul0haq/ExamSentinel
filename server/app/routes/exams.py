@@ -545,6 +545,82 @@ def deactivate_exam_endpoint(exam_id: int):
 
 
 # ------------------------------------------------------------------------
+# Course-scoped exam listing (teacher OR enrolled student)
+# ------------------------------------------------------------------------
+
+
+@exams_bp.get("/courses/<int:course_id>/exams")
+@jwt_required()
+def list_course_exams(course_id: int):
+    """List exams for a course.
+
+    Teachers who own the course see all exams with correct answers.
+    Students enrolled in the course see exam summaries with their
+    per-exam session status.
+    """
+    from ..models import Enrollment
+    from ..models.enums import ENROLLMENT_STATUS_ACTIVE
+    from ..models.exam_session import ExamSession
+
+    course = db.session.get(Course, course_id)
+    if course is None:
+        return error_response("not_found", "Course not found.", 404)
+
+    user = current_user()
+
+    if user.role == "teacher":
+        if course.teacher_id != user.id:
+            return error_response("forbidden", "You do not own this course.", 403)
+    else:
+        enrollment = (
+            db.session.query(Enrollment.id)
+            .filter(
+                Enrollment.student_id == user.id,
+                Enrollment.course_id == course_id,
+                Enrollment.status == ENROLLMENT_STATUS_ACTIVE,
+            )
+            .first()
+        )
+        if not enrollment:
+            return error_response("forbidden", "You are not enrolled in this course.", 403)
+
+    page, page_size = _get_pagination_params()
+    query = db.session.query(Exam).filter(Exam.course_id == course_id)
+    total_items = query.count()
+    exams = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    items = []
+    for exam in exams:
+        item = {
+            "id": exam.id,
+            "title": exam.title,
+            "description": exam.description,
+            "duration_minutes": exam.duration_minutes,
+            "start_window": exam.start_window.isoformat() if exam.start_window else None,
+            "end_window": exam.end_window.isoformat() if exam.end_window else None,
+            "is_active": exam.is_active,
+            "question_count": len(exam.questions),
+        }
+        if user.role == "teacher":
+            item["questions"] = [_serialize_question(q, include_correct=True) for q in exam.questions]
+        else:
+            session = (
+                db.session.query(ExamSession)
+                .filter(
+                    ExamSession.exam_id == exam.id,
+                    ExamSession.student_id == user.id,
+                )
+                .first()
+            )
+            item["session_status"] = str(session.status) if session else None
+            item["session_id"] = session.id if session else None
+        items.append(item)
+
+    result = _build_pagination_response(items, page, page_size, total_items)
+    return jsonify(result), 200
+
+
+# ------------------------------------------------------------------------
 # Student active exams endpoint
 # ------------------------------------------------------------------------
 

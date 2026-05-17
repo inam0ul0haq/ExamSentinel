@@ -61,6 +61,70 @@ def _serialize_question_for_student(question) -> Dict[str, Any]:
 # ------------------------------------------------------------------------
 
 
+@sessions_bp.get("/sessions/me")
+@student_required
+def list_my_sessions():
+    """List the current student's sessions in terminal states (history).
+
+    Returns a paginated list of sessions that are submitted, expired,
+    aborted_vm, or aborted_stealth_vm — ordered by ended_at descending.
+    """
+    page = int(request.args.get("page", 1))
+    page_size = min(int(request.args.get("page_size", 20)), 100)
+    if page < 1:
+        page = 1
+    if page_size < 1:
+        page_size = 20
+
+    user = current_user()
+
+    terminal_states = [
+        SESSION_STATUS_SUBMITTED,
+        SESSION_STATUS_EXPIRED,
+        SESSION_STATUS_ABORTED_VM,
+        SESSION_STATUS_ABORTED_STEALTH_VM,
+    ]
+
+    query = (
+        db.session.query(ExamSession)
+        .filter(
+            ExamSession.student_id == user.id,
+            ExamSession.status.in_(terminal_states),
+        )
+        .order_by(ExamSession.ended_at.desc().nullslast())
+    )
+
+    total_items = query.count()
+    sessions = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    items = []
+    for s in sessions:
+        exam = db.session.get(Exam, s.exam_id)
+        course = exam.course if exam else None
+        items.append({
+            "id": s.id,
+            "exam_id": s.exam_id,
+            "exam_title": exam.title if exam else "Unknown",
+            "course_code": course.code if course else "",
+            "status": str(s.status),
+            "started_at": s.started_at.isoformat() if s.started_at else None,
+            "ended_at": s.ended_at.isoformat() if s.ended_at else None,
+            "score": s.score,
+            "total_marks": exam.total_marks if exam else None,
+        })
+
+    total_pages = (total_items + page_size - 1) // page_size if total_items else 0
+    return jsonify({
+        "items": items,
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total_items": total_items,
+            "total_pages": total_pages,
+        },
+    }), 200
+
+
 @sessions_bp.post("/sessions")
 @student_required
 def create_session():
