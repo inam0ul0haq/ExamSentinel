@@ -19,7 +19,7 @@ if _ENV_FILE.is_file():
 # ---------------------------------------------------------------------------
 
 API_BASE_URL: str = os.getenv(
-    "API_BASE_URL", "http://127.0.0.1:5000/api/v1"
+    "API_BASE_URL", "https://web-production-5a17d.up.railway.app/api/v1"
 ).rstrip("/")
 
 SKIP_VM_CHECK: bool = os.getenv("SKIP_VM_CHECK", "0").strip().lower() in (

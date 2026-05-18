@@ -23,7 +23,7 @@ from client.app.screens.register import RegisterScreen
 from client.app.screens.teacher_dashboard import TeacherDashboardScreen
 from client.app.screens.student_dashboard import StudentDashboardScreen
 from client.app.screens.exam_integrity_check import ExamIntegrityCheckScreen
-from client.app.screens.exam_creation import ExamCreationScreen
+from client.app.screens.exam_editor import ExamCreationScreen
 from client.app.screens.teacher_review import TeacherReviewScreen
 
 
