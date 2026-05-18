@@ -234,7 +234,10 @@ def transition_session(session_id: int):
                 409,
                 details={"code": "invalid_state_transition"},
             )
-        session = transition_to_in_progress(session)
+        result = transition_to_in_progress(session)
+        if isinstance(result, tuple):
+            return result
+        session = result
 
     elif status in [SessionStatusEnum.ABORTED_VM, SessionStatusEnum.ABORTED_STEALTH_VM]:
         if session.status != SESSION_STATUS_PRE_CHECK:

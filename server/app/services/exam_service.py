@@ -35,13 +35,13 @@ def validate_exam_ownership(course_id: int, teacher_id: int) -> Optional[Course]
     return course
 
 
-def validate_questions_payload(questions: List[Dict[str, Any]]) -> None:
+def validate_questions_payload(questions: List[Dict[str, Any]]):
     """Validate the questions array for exam creation/update.
 
-    Raises validation_error if any validation fails.
+    Returns a Flask error-response tuple on failure, or None on success.
     """
     if not questions:
-        raise validation_error({"questions": ["Questions array cannot be empty."]})
+        return validation_error({"questions": ["Questions array cannot be empty."]})
 
     errors: Dict[str, List[str]] = {}
     order_indices = set()
@@ -118,7 +118,8 @@ def validate_questions_payload(questions: List[Dict[str, Any]]) -> None:
                 )
 
     if errors:
-        raise validation_error(errors)
+        return validation_error(errors)
+    return None
 
 
 def create_exam(
@@ -143,11 +144,13 @@ def create_exam(
     # Validate window
     if start_window and end_window:
         if end_window <= start_window:
-            raise validation_error(
+            return validation_error(
                 {"end_window": ["End window must be after start window."]}
             )
 
-    validate_questions_payload(questions)
+    q_err = validate_questions_payload(questions)
+    if q_err is not None:
+        return q_err
 
     # Calculate total_marks from questions
     total_marks = sum(q["marks"] for q in questions)
@@ -273,7 +276,7 @@ def activate_exam(exam: Exam) -> Exam:
         end_window = end_window.replace(tzinfo=timezone.utc)
     
     if end_window and end_window < now:
-        raise validation_error(
+        return validation_error(
             {"end_window": ["Cannot activate exam with end window in the past."]}
         )
 

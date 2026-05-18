@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, abort, jsonify, request
 
 from ..extensions import db
 from ..models import Course, Exam, Question
@@ -25,7 +25,7 @@ from ..services.exam_service import (
     validate_exam_ownership,
 )
 from ..utils.auth_decorators import current_user, jwt_required, student_required, teacher_required
-from ..utils.responses import error_response, validation_error
+from ..utils.responses import error_response, make_error_response, validation_error
 
 exams_bp = Blueprint("exams", __name__)
 
@@ -39,16 +39,18 @@ def _get_pagination_params() -> tuple[int, int]:
         page = int(request.args.get("page", 1))
         page_size = int(request.args.get("page_size", 20))
     except (TypeError, ValueError):
-        raise validation_error(
-            {"page": ["Page and page_size must be integers."]}
-        )
+        abort(make_error_response(
+            "validation_failed",
+            "Page and page_size must be integers.",
+            422,
+        ))
 
     if page < 1:
-        raise validation_error({"page": ["Page must be at least 1."]})
+        abort(make_error_response(
+            "validation_failed", "Page must be at least 1.", 422))
     if page_size < 1:
-        raise validation_error(
-            {"page_size": ["Page size must be at least 1."]}
-        )
+        abort(make_error_response(
+            "validation_failed", "Page size must be at least 1.", 422))
     if page_size > 100:
         page_size = 100
 
@@ -168,21 +170,20 @@ def create_exam_endpoint(course_id: int):
 
     user = current_user()
 
-    try:
-        exam = create_exam(
-            course_id=course_id,
-            title=title.strip(),
-            description=description.strip() if description else None,
-            duration_minutes=duration_minutes,
-            start_window=start_window,
-            end_window=end_window,
-            questions=questions,
-            teacher_id=user.id,
-        )
-    except Exception as e:
-        if isinstance(e, tuple):
-            return e  # error_response tuple
-        raise
+    exam = create_exam(
+        course_id=course_id,
+        title=title.strip(),
+        description=description.strip() if description else None,
+        duration_minutes=duration_minutes,
+        start_window=start_window,
+        end_window=end_window,
+        questions=questions,
+        teacher_id=user.id,
+    )
+
+    # create_exam returns an error-response tuple on failure
+    if isinstance(exam, tuple):
+        return exam
 
     # Build response with questions
     body = {
@@ -494,12 +495,10 @@ def activate_exam_endpoint(exam_id: int):
     if course.teacher_id != user.id:
         return error_response("forbidden", "You do not own this exam's course.", 403)
 
-    try:
-        exam = activate_exam(exam)
-    except Exception as e:
-        if isinstance(e, tuple):
-            return e  # error_response tuple
-        raise
+    result = activate_exam(exam)
+    if isinstance(result, tuple):
+        return result
+    exam = result
 
     body = {
         "id": exam.id,

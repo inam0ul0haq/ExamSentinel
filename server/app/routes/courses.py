@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, abort, jsonify, request
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 
@@ -26,7 +26,7 @@ from ..services.schemas import (
     ExamBriefSchema,
 )
 from ..utils.auth_decorators import current_user, teacher_required, jwt_required
-from ..utils.responses import error_response, validation_error
+from ..utils.responses import error_response, make_error_response, validation_error
 
 courses_bp = Blueprint("courses", __name__, url_prefix="/courses")
 
@@ -40,16 +40,18 @@ def _get_pagination_params() -> tuple[int, int]:
         page = int(request.args.get("page", 1))
         page_size = int(request.args.get("page_size", 20))
     except (TypeError, ValueError):
-        raise validation_error(
-            {"page": ["Page and page_size must be integers."]}
-        )
+        abort(make_error_response(
+            "validation_failed",
+            "Page and page_size must be integers.",
+            422,
+        ))
 
     if page < 1:
-        raise validation_error({"page": ["Page must be at least 1."]})
+        abort(make_error_response(
+            "validation_failed", "Page must be at least 1.", 422))
     if page_size < 1:
-        raise validation_error(
-            {"page_size": ["Page size must be at least 1."]}
-        )
+        abort(make_error_response(
+            "validation_failed", "Page size must be at least 1.", 422))
     if page_size > 100:
         page_size = 100
 

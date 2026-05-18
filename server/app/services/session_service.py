@@ -126,7 +126,7 @@ def transition_to_in_progress(session: ExamSession) -> ExamSession:
     Sets started_at and computes deadline_at.
     """
     if session.status != SESSION_STATUS_PRE_CHECK:
-        raise error_response(
+        return error_response(
             "conflict",
             "Session is not in pre_check state.",
             409,
