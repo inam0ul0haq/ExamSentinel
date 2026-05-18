@@ -250,16 +250,138 @@ class _SubViewBase(tk.Frame):
 # ===================================================================
 
 class _ReportsView(_SubViewBase):
+    """Lists every exam the teacher owns, across all courses, with quick
+    links into each exam's sessions list."""
+
     def __init__(self, parent: tk.Widget,
                  dashboard: TeacherDashboardScreen) -> None:
-        super().__init__(parent, dashboard, "Reports", show_refresh=False)
-        tk.Label(
-            self.body,
-            text="Detailed reporting coming in Part 18.",
-            font=theme.FONT_BODY,
-            bg=theme.BG_PRIMARY,
-            fg=theme.TEXT_SECONDARY,
-        ).pack(pady=60)
+        super().__init__(parent, dashboard, "Reports")
+        self._all_exams: List[dict] = []
+        self._list_frame = tk.Frame(self.body, bg=theme.BG_PRIMARY)
+        self._list_frame.pack(fill="both", expand=True)
+        self._show_list_loading()
+        self._fetch()
+
+    def _on_refresh(self) -> None:
+        self._clear_list()
+        self._show_list_loading()
+        self._fetch()
+
+    def _clear_list(self) -> None:
+        for w in self._list_frame.winfo_children():
+            w.destroy()
+
+    def _show_list_loading(self) -> None:
+        tk.Label(self._list_frame, text="Loading\u2026", font=theme.FONT_BODY,
+                 bg=theme.BG_PRIMARY, fg=theme.TEXT_SECONDARY).pack(pady=40)
+
+    def _fetch(self) -> None:
+        """Fetch all courses, then all exams per course."""
+        def _work():
+            ok, payload, err = self.api.get("/courses/me?page_size=100")
+            if not ok:
+                msg = err.message if err else "Failed to load courses."
+                self.root.after(0, lambda: self._show_error(msg))
+                return
+            courses = payload.get("items", [])
+            all_exams: List[dict] = []
+            for c in courses:
+                cid = c.get("id")
+                ok2, p2, _ = self.api.get(
+                    f"/courses/{cid}/exams?page_size=100")
+                if ok2:
+                    for ex in p2.get("items", []):
+                        ex["_course_code"] = c.get("code", "")
+                        ex["_course_title"] = c.get("title", "")
+                        all_exams.append(ex)
+            self.root.after(0, lambda: self._render(all_exams))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _render(self, exams: List[dict]) -> None:
+        self._clear_list()
+        self._all_exams = exams
+
+        if not exams:
+            tk.Label(self._list_frame,
+                     text="No exams found across your courses.",
+                     font=theme.FONT_BODY, bg=theme.BG_PRIMARY,
+                     fg=theme.TEXT_SECONDARY).pack(pady=60)
+            return
+
+        canvas = tk.Canvas(self._list_frame, bg=theme.BG_PRIMARY,
+                           highlightthickness=0, bd=0)
+        vsb = tk.Scrollbar(self._list_frame, orient="vertical",
+                           command=canvas.yview)
+        inner = tk.Frame(canvas, bg=theme.BG_PRIMARY)
+        inner.bind("<Configure>",
+                   lambda _: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw", tags=("inner",))
+        canvas.configure(yscrollcommand=vsb.set)
+
+        def _stretch(_e):
+            canvas.itemconfigure("inner", width=canvas.winfo_width())
+        canvas.bind("<Configure>", _stretch)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+
+        def _wheel(event):
+            try:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except tk.TclError:
+                pass
+        canvas.bind("<Enter>",
+                    lambda _: canvas.bind_all("<MouseWheel>", _wheel))
+        canvas.bind("<Leave>",
+                    lambda _: canvas.unbind_all("<MouseWheel>"))
+
+        # Header
+        hdr = tk.Frame(inner, bg=theme.BG_INPUT)
+        hdr.pack(fill="x", pady=(0, 2))
+        for txt, w in [("Course", 12), ("Exam", 28), ("Marks", 8),
+                       ("Status", 8), ("", 12)]:
+            tk.Label(hdr, text=txt, font=("Segoe UI", 9, "bold"),
+                     bg=theme.BG_INPUT, fg=theme.TEXT_SECONDARY,
+                     width=w, anchor="w").pack(side="left", padx=2, pady=4)
+
+        for ex in exams:
+            self._exam_row(inner, ex)
+
+    def _exam_row(self, parent: tk.Widget, exam: dict) -> None:
+        row = tk.Frame(parent, bg=theme.BG_SECONDARY,
+                       highlightbackground=theme.BORDER, highlightthickness=1)
+        row.pack(fill="x", pady=2)
+        inner = tk.Frame(row, bg=theme.BG_SECONDARY)
+        inner.pack(fill="x", padx=8, pady=6)
+
+        tk.Label(inner, text=exam.get("_course_code", ""),
+                 font=theme.FONT_SMALL, bg=theme.BG_SECONDARY,
+                 fg=theme.ACCENT, width=12, anchor="w").pack(side="left", padx=2)
+        tk.Label(inner, text=exam.get("title", ""),
+                 font=theme.FONT_SMALL, bg=theme.BG_SECONDARY,
+                 fg=theme.TEXT_PRIMARY, width=28, anchor="w").pack(
+            side="left", padx=2)
+        tm = exam.get("total_marks") or "\u2014"
+        tk.Label(inner, text=str(tm), font=theme.FONT_SMALL,
+                 bg=theme.BG_SECONDARY, fg=theme.TEXT_SECONDARY,
+                 width=8, anchor="w").pack(side="left", padx=2)
+        active = "Active" if exam.get("is_active") else "Inactive"
+        a_clr = theme.SUCCESS if exam.get("is_active") else theme.TEXT_SECONDARY
+        tk.Label(inner, text=active, font=theme.FONT_SMALL,
+                 bg=theme.BG_SECONDARY, fg=a_clr,
+                 width=8, anchor="w").pack(side="left", padx=2)
+
+        eid = exam.get("id")
+        tk.Button(inner, text="Review Sessions",
+                  font=("Segoe UI", 9, "bold"),
+                  bg=theme.ACCENT, fg="#FFFFFF",
+                  activebackground=theme.ACCENT_HOVER,
+                  activeforeground="#FFFFFF",
+                  relief="flat", cursor="hand2", bd=0,
+                  padx=8, pady=2,
+                  command=lambda: self.dashboard._router.show(
+                      "teacher_sessions_list", exam_id=eid)).pack(
+            side="left", padx=2)
 
 
 # ===================================================================
@@ -961,4 +1083,4 @@ class _ExamsTab(tk.Frame):
 
     def _review_sessions(self, exam_id: int) -> None:
         self._dashboard._router.show(
-            "teacher_review", exam_id=exam_id)
+            "teacher_sessions_list", exam_id=exam_id)

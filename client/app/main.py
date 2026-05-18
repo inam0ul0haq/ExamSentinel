@@ -26,6 +26,8 @@ from client.app.screens.exam_integrity_check import ExamIntegrityCheckScreen
 from client.app.screens.exam_taking import ExamTakingScreen
 from client.app.screens.exam_editor import ExamCreationScreen
 from client.app.screens.teacher_review import TeacherReviewScreen
+from client.app.screens.teacher_sessions_list import TeacherSessionsListScreen
+from client.app.screens.teacher_session_detail import TeacherSessionDetailScreen
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +79,8 @@ def main() -> None:
     router.register("exam_taking", ExamTakingScreen)
     router.register("exam_creation", ExamCreationScreen)
     router.register("teacher_review", TeacherReviewScreen)
+    router.register("teacher_sessions_list", TeacherSessionsListScreen)
+    router.register("teacher_session_detail", TeacherSessionDetailScreen)
 
     # --- navigate to initial screen ----------------------------------------
     router.show("splash", push=False)
