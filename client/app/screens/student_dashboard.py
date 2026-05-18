@@ -520,9 +520,11 @@ class _AvailableExamsView(_SubViewBase):
         if ss == "submitted":
             return ("View Result",
                     lambda: self.dashboard._router.show(
-                        "exam_integrity_check", session_id=sid))
+                        "exam_taking", session_id=sid))
         if ss == "in_progress":
-            return ("Resume", lambda: self._start(exam_id))
+            return ("Resume",
+                    lambda: self.dashboard._router.show(
+                        "exam_taking", session_id=sid))
         if ss in ("aborted_vm", "aborted_stealth_vm"):
             return ("Retry Exam", lambda: self._start(exam_id))
         return ("Start Exam", lambda: self._start(exam_id))

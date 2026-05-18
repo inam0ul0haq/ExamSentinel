@@ -212,10 +212,11 @@ def upsert_answer(session: ExamSession, question_id: int, answer_text: str) -> A
 def submit_session(session: ExamSession) -> Dict[str, Any]:
     """Submit a session and auto-grade MCQ answers.
 
-    Returns the score breakdown.
+    Returns the score breakdown, or a Flask error-response tuple if the
+    session cannot be submitted.
     """
     if session.status != SESSION_STATUS_IN_PROGRESS:
-        raise error_response(
+        return error_response(
             "conflict",
             "Session is not in progress.",
             409,

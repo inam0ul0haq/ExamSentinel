@@ -342,12 +342,11 @@ def submit_session_endpoint(session_id: int):
     if session.student_id != user.id:
         return error_response("forbidden", "You do not own this session.", 403)
 
-    try:
-        result = submit_session(session)
-    except Exception as e:
-        if hasattr(e, "get_response"):
-            return e.get_response()
-        raise
+    result = submit_session(session)
+
+    # submit_session returns an error-response tuple on failure
+    if isinstance(result, tuple):
+        return result
 
     body = {
         "id": session.id,
