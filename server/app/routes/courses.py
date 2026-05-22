@@ -17,7 +17,6 @@ from ..models import Course, Enrollment, Exam, Student, Teacher, User
 from ..models.enums import (
     ENROLLMENT_STATUS_ACTIVE,
     ENROLLMENT_STATUS_DROPPED,
-    EnrollmentStatusEnum,
 )
 from ..services.schemas import (
     CourseDetailSchema,
@@ -404,10 +403,9 @@ def update_course(course_id: int):
 def delete_course(course_id: int):
     """Delete a course (teacher-only, must own).
 
-    TODO: Rejected with 409 if any exam in the course has at least one
-    submitted or reviewed session (data integrity). This check requires
-    the Session model which is implemented in Part 9 (Sessions and Answers).
-    For now, deletion is always allowed since no exams/sessions exist yet.
+    Rejected with 409 if any exam in the course has at least one session
+    in any state. This preserves the forensic audit trail and prevents
+    orphaning student attempts.
     """
     course = db.session.get(Course, course_id)
     if course is None:
@@ -421,9 +419,21 @@ def delete_course(course_id: int):
             403,
         )
 
-    # TODO: Add session check once Session model exists (Part 9)
-    # from ..models import Session as ExamSession
-    # from ..models.enums import SessionStatusEnum
+    from ..models import Exam
+    from ..models.exam_session import ExamSession
+
+    has_sessions = (
+        db.session.query(ExamSession.id)
+        .join(Exam, ExamSession.exam_id == Exam.id)
+        .filter(Exam.course_id == course_id)
+        .first()
+    )
+    if has_sessions:
+        return error_response(
+            "conflict",
+            "Cannot delete course with existing exam sessions.",
+            409,
+        )
 
     db.session.delete(course)
     db.session.commit()
@@ -697,7 +707,7 @@ def list_enrollments(course_id: int):
     status_enum = (
         ENROLLMENT_STATUS_ACTIVE
         if status_filter == "active"
-        else EnrollmentStatusEnum.DROPPED
+        else ENROLLMENT_STATUS_DROPPED
     )
 
     query = (

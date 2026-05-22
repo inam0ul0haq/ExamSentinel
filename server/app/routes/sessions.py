@@ -424,4 +424,67 @@ def get_result(session_id: int):
     return jsonify(result), 200
 
 
+# ------------------------------------------------------------------------
+# Abort (VM detection failure)
+# ------------------------------------------------------------------------
+
+
+@sessions_bp.post("/sessions/<int:session_id>/abort")
+@student_required
+def abort_session(session_id: int):
+    """Abort a session due to VM detection or user cancellation.
+
+    Only allowed from pre_check status. Transitions to aborted_vm,
+    aborted_stealth_vm, or stays in pre_check (user cancel).
+    """
+    session = db.session.get(ExamSession, session_id)
+    if session is None:
+        return error_response("not_found", "Session not found.", 404)
+
+    user = current_user()
+    if session.student_id != user.id:
+        return error_response("forbidden", "You do not own this session.", 403)
+
+    if str(session.status) != SESSION_STATUS_PRE_CHECK:
+        return error_response(
+            "conflict",
+            "Session can only be aborted from pre_check state.",
+            409,
+        )
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return error_response("bad_request", "Request body must be a JSON object.", 400)
+
+    reason = payload.get("reason")
+    valid_reasons = {"vm", "stealth_vm", "user"}
+    if reason not in valid_reasons:
+        return error_response(
+            "validation",
+            f"reason must be one of: {', '.join(sorted(valid_reasons))}",
+            422,
+        )
+
+    from datetime import datetime, timezone
+
+    if reason == "vm":
+        session.status = SESSION_STATUS_ABORTED_VM
+    elif reason == "stealth_vm":
+        session.status = SESSION_STATUS_ABORTED_STEALTH_VM
+    else:
+        # User cancel — just end the session without a specific abort status
+        session.status = SESSION_STATUS_EXPIRED
+
+    session.ended_at = datetime.now(timezone.utc)
+    db.session.commit()
+    db.session.refresh(session)
+
+    body = {
+        "id": session.id,
+        "status": str(session.status),
+        "ended_at": session.ended_at.isoformat() if session.ended_at else None,
+    }
+    return jsonify(body), 200
+
+
 __all__ = ["sessions_bp"]

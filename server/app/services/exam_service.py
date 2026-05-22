@@ -16,8 +16,9 @@ from ..models import Course, Exam, Question
 from ..models.enums import (
     QUESTION_TYPE_MCQ,
     QUESTION_TYPE_SHORT_ANSWER,
+    SESSION_STATUS_ABORTED_STEALTH_VM,
+    SESSION_STATUS_ABORTED_VM,
     SESSION_STATUS_SUBMITTED,
-    SessionStatusEnum,
 )
 from ..utils.responses import error_response, validation_error
 
@@ -222,45 +223,39 @@ def create_exam(
 def can_edit_exam(exam: Exam) -> bool:
     """Check if an exam can be edited.
 
-    Returns False if any session has progressed beyond pre_check.
+    Returns False if any non-aborted session exists. VM-aborted attempts
+    are forensic pre-check failures and are explicitly editable per the
+    Part 10 contract.
     """
     from ..models.exam_session import ExamSession
 
-    has_active_session = (
+    has_blocking_session = (
         db.session.query(ExamSession.id)
         .filter(
             ExamSession.exam_id == exam.id,
-            ExamSession.status.in_(
-                [
-                    SessionStatusEnum.IN_PROGRESS,
-                    SessionStatusEnum.SUBMITTED,
-                    SessionStatusEnum.REVIEWED,
-                ]
-            ),
+            ExamSession.status.notin_([
+                SESSION_STATUS_ABORTED_VM,
+                SESSION_STATUS_ABORTED_STEALTH_VM,
+            ]),
         )
         .first()
     )
-    return not bool(has_active_session)
+    return not bool(has_blocking_session)
 
 
 def can_delete_exam(exam: Exam) -> bool:
     """Check if an exam can be deleted.
 
-    Returns False if any submitted or reviewed session exists.
+    Returns False if any session exists.
     """
     from ..models.exam_session import ExamSession
 
-    has_finalized_session = (
+    has_session = (
         db.session.query(ExamSession.id)
-        .filter(
-            ExamSession.exam_id == exam.id,
-            ExamSession.status.in_(
-                [SessionStatusEnum.SUBMITTED, SessionStatusEnum.REVIEWED]
-            ),
-        )
+        .filter(ExamSession.exam_id == exam.id)
         .first()
     )
-    return not bool(has_finalized_session)
+    return not bool(has_session)
 
 
 def activate_exam(exam: Exam) -> Exam:
@@ -307,7 +302,9 @@ def replace_questions(exam: Exam, questions: List[Dict[str, Any]]) -> Exam:
             409,
         )
 
-    validate_questions_payload(questions)
+    q_err = validate_questions_payload(questions)
+    if q_err is not None:
+        return q_err
 
     # Delete existing questions
     db.session.query(Question).filter(Question.exam_id == exam.id).delete()

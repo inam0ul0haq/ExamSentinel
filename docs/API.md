@@ -270,6 +270,8 @@ All primary keys are positive integers. They appear in URL paths as plain intege
 
 ## 7. Incident Logs
 
+**Implementation note.** The current backend and VM integration use `POST /sessions/{session_id}/incident` for one event and `POST /sessions/{session_id}/incidents` for bulk ingestion. Incident payloads use `type`, `severity`, optional `description`, and optional forensic fields `cpu_thermal_value`, `timing_latency_ms`, and `evidence_path`; the VM guide's `VM_DETECTED` and `STEALTH_VM_DETECTED` values are the canonical VM incident types.
+
 ### `POST /sessions/{session_id}/incidents`
 **Roles:** student only (must own the session).
 **Request body in prose.** Carries an `incident_type` string that is exactly one of `vm_detected`, `stealth_vm_detected`, `focus_loss`, `blacklist_process_killed`, `clipboard_scrubbed`, `lockdown_violation`, `timing_anomaly`, `thermal_anomaly`. Carries a `severity` string that is exactly one of `info`, `warning`, `critical`. Carries a `client_timestamp` ISO-8601 string indicating when the event was observed on the client (the server records its own receive timestamp separately so clock skew is auditable). Carries a `detail` object whose contents are free-form but typed by `incident_type`: for `focus_loss` it carries the foreground window title and process name; for `blacklist_process_killed` it carries the process name and pid; for `clipboard_scrubbed` it carries a hash and length of the scrubbed content (never the content itself); for `lockdown_violation` it carries the violation kind (e.g. `keyboard_combo`) and a key sequence; for `vm_detected` and `stealth_vm_detected` it carries the list of detector names that triggered. For stealth-VM evidence the `detail` may additionally carry `timing_samples` (an array of float microsecond deltas from RDTSC probes) and `thermal_samples` (an array of float Celsius readings from the thermal sensors, or an empty array indicating "no sensor present", which is itself evidence of a virtualised environment). Both fields are optional and only populated for VM-related incidents.
@@ -287,6 +289,8 @@ All primary keys are positive integers. They appear in URL paths as plain intege
 ---
 
 ## 8. Teacher Reporting
+
+**Implementation note.** The current backend mounts teacher reporting under `/teacher`: sessions list at `GET /teacher/exams/{exam_id}/sessions`, detail at `GET /teacher/sessions/{session_id}/detail`, manual grading at `POST /teacher/sessions/{session_id}/grade`, and analytics at `GET /teacher/exams/{exam_id}/analytics`.
 
 ### `GET /exams/{exam_id}/sessions`
 **Roles:** teacher only (must own the exam's course).
@@ -354,10 +358,9 @@ All primary keys are positive integers. They appear in URL paths as plain intege
 | POST | `/sessions/{id}/submit` | student | Submit and auto-grade |
 | GET | `/sessions/{id}/time` | student | Server-authoritative timer |
 | GET | `/sessions/{id}/result` | student, teacher | Result view |
-| POST | `/sessions/{id}/incidents` | student | Ingest one incident |
-| POST | `/sessions/{id}/incidents/bulk` | student | Flush incident queue |
-| GET | `/exams/{id}/sessions` | teacher | Sessions for an exam |
-| GET | `/sessions/{id}/full` | teacher | Full review payload |
-| PATCH | `/sessions/{id}/answers/{qid}/grade` | teacher | Manually grade text answer |
-| PATCH | `/sessions/{id}/review` | teacher | Mark reviewed |
-| GET | `/exams/{id}/analytics` | teacher | Exam analytics summary |
+| POST | `/sessions/{id}/incident` | student | Ingest one incident |
+| POST | `/sessions/{id}/incidents` | student | Flush incident queue |
+| GET | `/teacher/exams/{id}/sessions` | teacher | Sessions for an exam |
+| GET | `/teacher/sessions/{id}/detail` | teacher | Full review payload |
+| POST | `/teacher/sessions/{id}/grade` | teacher | Manually grade text answer |
+| GET | `/teacher/exams/{id}/analytics` | teacher | Exam analytics summary |

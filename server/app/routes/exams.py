@@ -461,6 +461,8 @@ def replace_questions_endpoint(exam_id: int):
         if hasattr(e, "get_response"):
             return e.get_response()
         raise
+    if isinstance(exam, tuple):
+        return exam
 
     body = {
         "id": exam.id,

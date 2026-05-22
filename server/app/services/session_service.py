@@ -87,26 +87,41 @@ def get_or_create_session(exam_id: int, student_id: int) -> ExamSession:
     if not validate_session_eligibility(exam, student_id):
         return error_response("forbidden", "You are not enrolled in this exam's course.", 403, details={"code": "not_enrolled"})
 
-    # Check for existing session
-    existing_session = (
+    # Prefer an already-open attempt. This matters after a VM-aborted
+    # attempt: old aborted rows remain for forensics, but they must not
+    # mask a newer pre_check/in_progress retry.
+    active_session = (
         db.session.query(ExamSession)
         .filter(
             ExamSession.exam_id == exam_id,
             ExamSession.student_id == student_id,
+            ExamSession.status.in_([
+                SESSION_STATUS_PRE_CHECK,
+                SESSION_STATUS_IN_PROGRESS,
+            ]),
+        )
+        .order_by(ExamSession.id.desc())
+        .first()
+    )
+    if active_session:
+        return active_session
+
+    submitted_session = (
+        db.session.query(ExamSession.id)
+        .filter(
+            ExamSession.exam_id == exam_id,
+            ExamSession.student_id == student_id,
+            ExamSession.status == SESSION_STATUS_SUBMITTED,
         )
         .first()
     )
-
-    if existing_session:
-        # If pre_check or in_progress, return it (resume semantics)
-        if existing_session.status in [SESSION_STATUS_PRE_CHECK, SESSION_STATUS_IN_PROGRESS]:
-            return existing_session
-        # If submitted or reviewed, no retakes
-        elif existing_session.status == SESSION_STATUS_SUBMITTED:
-            return error_response("conflict", "You have already attempted this exam.", 409, details={"code": "already_attempted"})
-        # If aborted, allow new attempt
-        else:
-            pass  # Create new session
+    if submitted_session:
+        return error_response(
+            "conflict",
+            "You have already attempted this exam.",
+            409,
+            details={"code": "already_attempted"},
+        )
 
     # Create new session
     session = ExamSession(
