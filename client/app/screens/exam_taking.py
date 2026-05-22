@@ -21,6 +21,11 @@ import threading
 import tkinter as tk
 from typing import Any, Callable, Dict, List, Optional
 
+from client.app.lockdown.clipboard_scrub import ClipboardScrubSubsystem
+from client.app.lockdown.keyboard import KeyboardLockdown
+from client.app.lockdown.manager import LockdownManager
+from client.app.lockdown.process_kill import ProcessKillSubsystem
+from client.app.lockdown.right_click_suppress import RightClickSuppressSubsystem
 from client.app.ui import theme
 
 
@@ -81,22 +86,41 @@ class ExamTakingScreen(tk.Frame):
         threading.Thread(target=self._fetch_session, daemon=True).start()
 
     # ==================================================================
-    # Lockdown stubs (Parts 23-27 fill these in)
+    # Lockdown (Part 23+)
     # ==================================================================
 
     def start_lockdown(self, on_violation: Callable) -> None:
-        """Invoked when the screen mounts in active mode.
+        """Instantiate and start the LockdownManager.
 
-        No-op stub — Parts 23–27 add real lockdown behaviour.
+        Passes the root Tk window and a bound report_violation method.
+        Subsystems registered inside the manager are started in order.
         """
         self._on_violation_cb = on_violation
+        self._lockdown_manager = LockdownManager(
+            window=self._root,
+            report_violation=self.report_violation,
+            shutdown_event=self._shutdown,
+        )
+        # Register lockdown subsystems
+        self._lockdown_manager.register(
+            KeyboardLockdown(self._lockdown_manager, self._shutdown)
+        )
+        self._lockdown_manager.register(
+            ProcessKillSubsystem(self._lockdown_manager, self._shutdown)
+        )
+        self._lockdown_manager.register(
+            ClipboardScrubSubsystem(self._lockdown_manager, self._shutdown)
+        )
+        self._right_click_sub = RightClickSuppressSubsystem(
+            self._lockdown_manager, self._root
+        )
+        self._lockdown_manager.register(self._right_click_sub)
+        self._lockdown_manager.start()
 
     def stop_lockdown(self) -> None:
-        """Invoked when the screen unmounts (any reason).
-
-        No-op stub — Parts 23–27 add real lockdown teardown.
-        """
-        pass
+        """Stop the lockdown manager. Idempotent — safe to call multiple times."""
+        if hasattr(self, '_lockdown_manager') and self._lockdown_manager is not None:
+            self._lockdown_manager.stop()
 
     # ==================================================================
     # Incident reporting & offline queue
