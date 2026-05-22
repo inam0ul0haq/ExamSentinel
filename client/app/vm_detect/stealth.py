@@ -263,8 +263,13 @@ def _check_rdtsc_timing() -> List[Dict[str, Any]]:
                 deltas.sort()
                 median_delta = deltas[len(deltas) // 2]
 
-                # Threshold: bare metal ~50-150 cycles, VM ~1000-50000 cycles
-                THRESHOLD = 500
+                # Threshold: bare metal ~50-2000 cycles (varies widely by CPU
+                # microarch — Intel Alder/Raptor Lake hybrid cores and AMD
+                # Zen4 can hit 1500-2000 on real hardware due to P/E core
+                # scheduling and power-state transitions).
+                # VMs are consistently 3000-50000+.
+                # Use 2500 to avoid false positives on modern CPUs.
+                THRESHOLD = 2500
 
                 if median_delta > THRESHOLD:
                     indicators.append({

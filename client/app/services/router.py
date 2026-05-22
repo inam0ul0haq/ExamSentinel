@@ -23,6 +23,7 @@ class Router:
         self._content_frame.pack(fill="both", expand=True)
         self._current_screen: Optional[tk.Frame] = None
         self._current_name: Optional[str] = None
+        self._current_kwargs: Dict[str, Any] = {}
         self._back_stack: List[Dict[str, Any]] = []
 
     # -- registration -------------------------------------------------------
@@ -50,7 +51,7 @@ class Router:
 
         # Push current onto back-stack (if requested and there is one).
         if push and self._current_name is not None:
-            self._back_stack.append({"name": self._current_name})
+            self._back_stack.append({"name": self._current_name, "kwargs": self._current_kwargs})
 
         self._destroy_current()
 
@@ -58,13 +59,14 @@ class Router:
         self._current_screen = cls(self._content_frame, self, **kwargs)
         self._current_screen.pack(fill="both", expand=True)
         self._current_name = screen_name
+        self._current_kwargs = kwargs
 
     def back(self) -> None:
         """Navigate to the previous screen on the back-stack."""
         if not self._back_stack:
             return
         entry = self._back_stack.pop()
-        self.show(entry["name"], push=False)
+        self.show(entry["name"], push=False, **entry.get("kwargs", {}))
 
     @property
     def can_go_back(self) -> bool:

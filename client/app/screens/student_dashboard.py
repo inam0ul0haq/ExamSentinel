@@ -538,9 +538,10 @@ class _AvailableExamsView(_SubViewBase):
                 "/sessions", body={"exam_id": exam_id})
             if ok:
                 sid = payload.get("id")
+                eid = payload.get("exam_id", exam_id)
                 self.root.after(
                     0, lambda: self.dashboard._router.show(
-                        "exam_integrity_check", session_id=sid))
+                        "exam_integrity_check", session_id=sid, exam_id=eid))
             else:
                 msg = err.message if err else "Failed to start exam."
                 self.root.after(0, lambda: self._show_error(msg))

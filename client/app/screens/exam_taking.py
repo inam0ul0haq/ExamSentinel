@@ -41,13 +41,14 @@ class ExamTakingScreen(tk.Frame):
     """Full exam-taking screen with timer, navigator, and question pane."""
 
     def __init__(self, parent: tk.Widget, router: Any, *,
-                 session_id: Any = None, **kwargs: Any) -> None:
+                 session_id: Any = None, exam_id: Any = None, **kwargs: Any) -> None:
         super().__init__(parent, bg=theme.BG_PRIMARY)
         self._router = router
         self._api = router.api            # type: ignore[attr-defined]
         self._session_state = router.session  # type: ignore[attr-defined]
         self._root: tk.Tk = router.root
         self._session_id = int(session_id) if session_id else None
+        self._exam_id_hint = int(exam_id) if exam_id else None
 
         # Shutdown signal for background threads
         self._shutdown = threading.Event()
@@ -217,20 +218,18 @@ class ExamTakingScreen(tk.Frame):
         tr = (time_data.get("time_remaining_seconds", 0)
               if ok_t and time_data else 0)
 
-        # 2. Find exam_id via active-exams list
-        ok_e, exams_payload, _ = self._api.get(
-            "/exams/active?page_size=100")
-        if not ok_e:
-            self._root.after(0, lambda: self._show_load_error(
-                "Failed to load exam data."))
-            return
-
-        exam_id = None
-        for ex in exams_payload.get("items", []):
-            if ex.get("session_id") == self._session_id:
-                exam_id = ex.get("id")
-                self._exam_title = ex.get("title", "Exam")
-                break
+        # 2. Get exam_id — use hint passed from navigation, or look up
+        exam_id = self._exam_id_hint
+        if exam_id is None:
+            # Fallback: search active exams list
+            ok_e, exams_payload, _ = self._api.get(
+                "/exams/active?page_size=100")
+            if ok_e:
+                for ex in exams_payload.get("items", []):
+                    if ex.get("session_id") == self._session_id:
+                        exam_id = ex.get("id")
+                        self._exam_title = ex.get("title", "Exam")
+                        break
 
         if exam_id is None:
             self._root.after(0, lambda: self._show_load_error(
@@ -848,25 +847,30 @@ class ExamTakingScreen(tk.Frame):
 
     def _submit_bg(self) -> None:
         """Background submit: flush incidents, then POST submit."""
-        # Flush incidents synchronously before submit
-        self._flush_incidents()
+        try:
+            # Flush incidents synchronously before submit
+            self._flush_incidents()
 
-        ok, payload, err = self._api.post(
-            f"/sessions/{self._session_id}/submit")
+            ok, payload, err = self._api.post(
+                f"/sessions/{self._session_id}/submit")
 
-        if ok:
-            self._root.after(0, self._on_submit_success)
-        else:
-            # Handle 409 gracefully (already submitted/expired)
-            http_status = err.http_status if err else 0
-            if http_status == 409:
+            if ok:
                 self._root.after(0, self._on_submit_success)
             else:
-                msg = err.message if err else "Submit failed."
-                self._root.after(0, lambda: self._on_submit_failure(msg))
+                # Handle 409 gracefully (already submitted/expired)
+                http_status = err.http_status if err else 0
+                if http_status == 409:
+                    self._root.after(0, self._on_submit_success)
+                else:
+                    msg = err.message if err else "Submit failed."
+                    self._root.after(0, lambda: self._on_submit_failure(msg))
+        except Exception:
+            # Any crash — still navigate away
+            self._root.after(0, self._on_submit_success)
 
     def _on_submit_success(self) -> None:
-        self._cleanup()
+        # Run cleanup in background to avoid blocking GUI (lockdown stop has joins)
+        threading.Thread(target=self._cleanup, daemon=True).start()
         self._show_result_view()
 
     def _on_submit_failure(self, msg: str) -> None:

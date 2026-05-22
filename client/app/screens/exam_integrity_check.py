@@ -26,12 +26,13 @@ class ExamIntegrityCheckScreen(tk.Frame):
     """Pre-exam integrity gate with real VM detection."""
 
     def __init__(self, parent: tk.Widget, router: Any, *,
-                 session_id: Any = None, **kwargs: Any) -> None:
+                 session_id: Any = None, exam_id: Any = None, **kwargs: Any) -> None:
         super().__init__(parent, bg=theme.BG_PRIMARY)
         self._router = router
         self._api = router.api          # type: ignore[attr-defined]
         self._root: tk.Tk = router.root
         self._session_id = int(session_id) if session_id else None
+        self._exam_id = int(exam_id) if exam_id else None
         self._aborted = False
 
         # --- heading ---
@@ -385,6 +386,9 @@ class ExamIntegrityCheckScreen(tk.Frame):
         )
         if ok:
             self._root.after(0, self._on_transition_ok)
+        elif err and getattr(err, "http_status", 0) in (409, 422):
+            # Session already in_progress (e.g. resumed) — proceed anyway
+            self._root.after(0, self._on_transition_ok)
         else:
             msg = err.message if err else "Transition failed."
             self._root.after(0, lambda: self._on_transition_fail(msg))
@@ -393,6 +397,7 @@ class ExamIntegrityCheckScreen(tk.Frame):
         self._router.show(
             "exam_taking",
             session_id=self._session_id,
+            exam_id=self._exam_id,
             push=False,
         )
 
