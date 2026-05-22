@@ -261,21 +261,16 @@ def can_delete_exam(exam: Exam) -> bool:
 def activate_exam(exam: Exam) -> Exam:
     """Activate an exam.
 
-    Validates that the exam has questions and end_window is not in the past.
+    Automatically sets start_window to *now* and end_window to *now + 30 days*
+    so the exam is immediately visible to students without manual scheduling.
     """
+    from datetime import timedelta
+
     now = datetime.now(timezone.utc)
-    
-    # Convert end_window to aware datetime if it's naive
-    end_window = exam.end_window
-    if end_window and end_window.tzinfo is None:
-        end_window = end_window.replace(tzinfo=timezone.utc)
-    
-    if end_window and end_window < now:
-        return validation_error(
-            {"end_window": ["Cannot activate exam with end window in the past."]}
-        )
 
     exam.is_active = True
+    exam.start_window = now
+    exam.end_window = now + timedelta(days=30)
     db.session.commit()
     db.session.refresh(exam)
     return exam
@@ -396,8 +391,6 @@ def get_student_active_exams(student_id: int, page: int, page_size: int) -> tupl
             Enrollment.student_id == student_id,
             Enrollment.status == "active",
             Exam.is_active == True,
-            Exam.start_window <= now,
-            Exam.end_window >= now,
         )
     )
 
