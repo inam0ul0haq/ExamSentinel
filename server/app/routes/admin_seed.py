@@ -36,17 +36,25 @@ def _token_ok() -> bool:
 @admin_seed_bp.post("/")
 def run_seed():
     if not _token_ok():
-        # 404 so callers without the token cannot even confirm the route
-        # exists. Matches the prompt's "return 404 to avoid even
-        # confirming the endpoint exists" requirement.
         return error_response("not_found", "Not found.", 404)
 
-    # Lazy import so a misconfigured FLASK_ENV that disables seed does
-    # not pay the Faker import cost on every cold start.
     from seed.generator import regenerate_demo_data
 
     summary = regenerate_demo_data()
     return jsonify(summary), 200
+
+
+@admin_seed_bp.delete("")
+@admin_seed_bp.delete("/")
+def wipe_all():
+    """Delete ALL rows from every table. No re-seed."""
+    if not _token_ok():
+        return error_response("not_found", "Not found.", 404)
+
+    from seed.generator import _wipe_database
+
+    _wipe_database()
+    return jsonify({"ok": True, "action": "wiped_all_tables"}), 200
 
 
 __all__ = ["admin_seed_bp"]
