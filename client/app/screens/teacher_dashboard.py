@@ -393,6 +393,21 @@ class _MyCoursesView(_SubViewBase):
                  dashboard: TeacherDashboardScreen) -> None:
         super().__init__(parent, dashboard, "My Courses")
         self._all_courses: List[dict] = []
+        self._build_list_ui()
+
+        cached = self.cache.get("teacher_courses")
+        if cached is not None:
+            self._all_courses = cached
+            self._render_list(cached)
+        else:
+            self._show_list_loading()
+            self._fetch()
+
+    def _build_list_ui(self) -> None:
+        """Create the toolbar (search + New Course) and list frame.
+
+        Safe to call repeatedly — clears body first.
+        """
         self._search_var = tk.StringVar()
 
         # Toolbar: search + new course button
@@ -441,14 +456,6 @@ class _MyCoursesView(_SubViewBase):
 
         self._list_frame = tk.Frame(self.body, bg=theme.BG_PRIMARY)
         self._list_frame.pack(fill="both", expand=True)
-
-        cached = self.cache.get("teacher_courses")
-        if cached is not None:
-            self._all_courses = cached
-            self._render_list(cached)
-        else:
-            self._show_list_loading()
-            self._fetch()
 
     def _on_refresh(self) -> None:
         self.cache.pop("teacher_courses", None)
@@ -712,7 +719,7 @@ class _CourseDetailMini(tk.Frame):
 
     def _go_back(self) -> None:
         self._cv._clear_body()
-        self._cv._clear_list()
+        self._cv._build_list_ui()
         self._cv._render_list(self._cv._all_courses)
 
 
