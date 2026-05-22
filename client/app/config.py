@@ -1,16 +1,25 @@
 """
 ExamSentinel client configuration.
 Reads settings from environment variables (loaded from ``client/.env`` when present).
+
+PyInstaller-aware: when frozen, looks for .env next to the exe first.
 """
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load .env from the *client* directory (one level above this file's package).
-_CLIENT_DIR = Path(__file__).resolve().parent.parent
-_ENV_FILE = _CLIENT_DIR / ".env"
+# Determine base directory:
+#   Frozen (PyInstaller onefile): directory containing the .exe
+#   Source:                       client/ (one level above this package)
+if getattr(sys, "frozen", False):
+    _BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    _BASE_DIR = Path(__file__).resolve().parent.parent
+
+_ENV_FILE = _BASE_DIR / ".env"
 if _ENV_FILE.is_file():
     load_dotenv(_ENV_FILE)
 
@@ -19,7 +28,7 @@ if _ENV_FILE.is_file():
 # ---------------------------------------------------------------------------
 
 API_BASE_URL: str = os.getenv(
-    "API_BASE_URL", "http://127.0.0.1:5000/api/v1"
+    "API_BASE_URL", "https://web-production-5a17d.up.railway.app/api/v1"
 ).rstrip("/")
 
 SKIP_VM_CHECK: bool = os.getenv("SKIP_VM_CHECK", "0").strip().lower() in (

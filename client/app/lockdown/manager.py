@@ -209,6 +209,18 @@ class LockdownManager:
         # Install crash handlers BEFORE starting subsystems
         self._install_exception_handlers()
 
+        all_names = [sub.name for sub in self._subsystems]
+        self._active = True
+
+        # Post LOCKDOWN_ENGAGED first so it precedes any subsystem
+        # incidents in the timeline (background threads can fire early).
+        self._report_violation(
+            "LOCKDOWN_ENGAGED",
+            "info",
+            f"Lockdown engaged. Active subsystems: {', '.join(all_names) or 'none'}.",
+            active_subsystems=all_names,
+        )
+
         active_names: List[str] = []
         self._failed_subsystems = []
 
@@ -233,17 +245,6 @@ class LockdownManager:
                 failed_subsystems=self._failed_subsystems,
                 active_subsystems=active_names,
             )
-
-        self._active = True
-
-        # Post LOCKDOWN_ENGAGED
-        self._report_violation(
-            "LOCKDOWN_ENGAGED",
-            "info",
-            f"Lockdown engaged. Active subsystems: {', '.join(active_names) or 'none'}.",
-            active_subsystems=active_names,
-            failed_subsystems=self._failed_subsystems,
-        )
 
         logger.info(
             f"LockdownManager started. Active: {active_names}, "
