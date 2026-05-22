@@ -571,48 +571,51 @@ class _NewCourseModal(tk.Toplevel):
         self.title("New Course")
         self.configure(bg=theme.BG_SECONDARY)
         self.resizable(False, False)
-        self.geometry("380x260")
+        self.geometry("420x340")
         self.transient(parent.winfo_toplevel())
         self.grab_set()
 
-        pad = {"padx": 20, "pady": (12, 0)}
+        # --- Pack buttons at BOTTOM first (Tk gives bottom priority) ---
+        btns = tk.Frame(self, bg=theme.BG_SECONDARY)
+        btns.pack(side="bottom", fill="x", padx=20, pady=(0, 16))
+
+        tk.Button(btns, text="Cancel", font=theme.FONT_BODY,
+                  bg=theme.BG_INPUT, fg=theme.TEXT_SECONDARY,
+                  relief="flat", cursor="hand2", bd=0, padx=14, pady=6,
+                  command=self.destroy).pack(side="right", padx=(8, 0))
+        tk.Button(btns, text="Create Course", font=("Segoe UI", 11, "bold"),
+                  bg=theme.ACCENT, fg="#FFFFFF",
+                  activebackground=theme.ACCENT_HOVER,
+                  activeforeground="#FFFFFF",
+                  relief="flat", cursor="hand2", bd=0, padx=16, pady=6,
+                  command=self._submit).pack(side="right")
+
+        self._msg = tk.Label(self, text="", font=theme.FONT_SMALL,
+                             bg=theme.BG_SECONDARY, fg=theme.ERROR)
+        self._msg.pack(side="bottom", fill="x", padx=20, pady=(8, 4))
+
+        # --- Form fields ---
+        pad = {"padx": 20, "pady": (16, 0)}
         tk.Label(self, text="Create New Course", font=theme.FONT_SUBHEADING,
                  bg=theme.BG_SECONDARY, fg=theme.TEXT_PRIMARY).pack(**pad)
 
         tk.Label(self, text="Course Code", font=theme.FONT_SMALL,
                  bg=theme.BG_SECONDARY, fg=theme.TEXT_SECONDARY,
-                 anchor="w").pack(fill="x", padx=20, pady=(12, 2))
+                 anchor="w").pack(fill="x", padx=20, pady=(16, 2))
         self._code_var = tk.StringVar()
         tk.Entry(self, textvariable=self._code_var, font=theme.FONT_BODY,
                  bg=theme.BG_INPUT, fg=theme.TEXT_PRIMARY,
                  insertbackground=theme.TEXT_PRIMARY,
-                 relief="flat", bd=0).pack(fill="x", padx=20, ipady=5)
+                 relief="flat", bd=0).pack(fill="x", padx=20, ipady=6)
 
         tk.Label(self, text="Title", font=theme.FONT_SMALL,
                  bg=theme.BG_SECONDARY, fg=theme.TEXT_SECONDARY,
-                 anchor="w").pack(fill="x", padx=20, pady=(8, 2))
+                 anchor="w").pack(fill="x", padx=20, pady=(12, 2))
         self._title_var = tk.StringVar()
         tk.Entry(self, textvariable=self._title_var, font=theme.FONT_BODY,
                  bg=theme.BG_INPUT, fg=theme.TEXT_PRIMARY,
                  insertbackground=theme.TEXT_PRIMARY,
-                 relief="flat", bd=0).pack(fill="x", padx=20, ipady=5)
-
-        self._msg = tk.Label(self, text="", font=theme.FONT_SMALL,
-                             bg=theme.BG_SECONDARY, fg=theme.ERROR)
-        self._msg.pack(fill="x", padx=20, pady=(6, 0))
-
-        btns = tk.Frame(self, bg=theme.BG_SECONDARY)
-        btns.pack(fill="x", padx=20, pady=12)
-        tk.Button(btns, text="Cancel", font=theme.FONT_BODY,
-                  bg=theme.BG_INPUT, fg=theme.TEXT_SECONDARY,
-                  relief="flat", cursor="hand2", bd=0, padx=12, pady=4,
-                  command=self.destroy).pack(side="right", padx=(8, 0))
-        tk.Button(btns, text="Create", font=("Segoe UI", 10, "bold"),
-                  bg=theme.ACCENT, fg="#FFFFFF",
-                  activebackground=theme.ACCENT_HOVER,
-                  activeforeground="#FFFFFF",
-                  relief="flat", cursor="hand2", bd=0, padx=12, pady=4,
-                  command=self._submit).pack(side="right")
+                 relief="flat", bd=0).pack(fill="x", padx=20, ipady=6)
 
     def _submit(self) -> None:
         code = self._code_var.get().strip()

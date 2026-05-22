@@ -253,16 +253,19 @@ class ExamCreationScreen(tk.Frame):
         )
         self._add_sa_btn.pack(side="left")
 
-        self._questions_container = tk.Frame(self, bg=theme.BG_PRIMARY)
-        self._questions_container.pack(fill="both", expand=True, padx=24, pady=(4, 0))
-
         # Will be rebuilt whenever questions change
         self._canvas: Optional[tk.Canvas] = None
         self._inner: Optional[tk.Frame] = None
 
         # ----------- Bottom section: Cancel / Save / Total marks ------
+        # Packed BEFORE the expanding questions container so Tk always
+        # allocates space for the Save button (bottom-first priority).
         bot = tk.Frame(self, bg=theme.BG_PRIMARY)
-        bot.pack(fill="x", padx=24, pady=(4, 12))
+        bot.pack(side="bottom", fill="x", padx=24, pady=(4, 12))
+
+        # Questions container — fills remaining space
+        self._questions_container = tk.Frame(self, bg=theme.BG_PRIMARY)
+        self._questions_container.pack(fill="both", expand=True, padx=24, pady=(4, 0))
 
         self._cancel_btn = tk.Button(
             bot, text="Cancel", font=theme.FONT_BUTTON,

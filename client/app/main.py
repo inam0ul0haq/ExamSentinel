@@ -35,15 +35,22 @@ from client.app.screens.teacher_session_detail import TeacherSessionDetailScreen
 # ---------------------------------------------------------------------------
 
 APP_TITLE = "ExamSentinel"
-WINDOW_WIDTH = 1100
-WINDOW_HEIGHT = 720
+_PREFERRED_WIDTH = 1100
+_PREFERRED_HEIGHT = 720
+_MIN_WIDTH = 900
+_MIN_HEIGHT = 620
 
 
-def _centre_window(root: tk.Tk, w: int, h: int) -> None:
-    """Position *root* at the centre of the primary monitor."""
+def _centre_window(root: tk.Tk) -> None:
+    """Size and centre *root* adaptively based on screen resolution."""
     root.update_idletasks()
     screen_w = root.winfo_screenwidth()
     screen_h = root.winfo_screenheight()
+
+    # Use preferred size, but cap at 92% of screen
+    w = min(_PREFERRED_WIDTH, int(screen_w * 0.92))
+    h = min(_PREFERRED_HEIGHT, int(screen_h * 0.92))
+
     x = (screen_w - w) // 2
     y = (screen_h - h) // 2
     root.geometry(f"{w}x{h}+{x}+{y}")
@@ -53,8 +60,9 @@ def main() -> None:
     root = tk.Tk()
     root.title(APP_TITLE)
     root.configure(bg=theme.BG_PRIMARY)
-    root.resizable(False, False)
-    _centre_window(root, WINDOW_WIDTH, WINDOW_HEIGHT)
+    root.resizable(True, True)
+    root.minsize(_MIN_WIDTH, _MIN_HEIGHT)
+    _centre_window(root)
 
     # --- core services (accessible from screens via router / app) ----------
     api_client = ApiClient()
