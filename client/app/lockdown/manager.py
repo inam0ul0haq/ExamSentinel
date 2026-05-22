@@ -22,8 +22,20 @@ Threading model:
 
 Violation pipeline:
     - Subsystems call manager.report(type, severity, description, **forensics)
-    - Manager attaches subsystem metadata and forwards to the screen's
-      report_violation callable.
+    - Manager attaches subsystem metadata and forwards to the incident
+      pipeline (or a direct callback fallback).
+
+Subsystem registration order (startup):
+    1. MultiMonitorSubsystem    — abort early before going fullscreen
+    2. KeyboardLockdown          — block keys before fullscreen
+    3. ProcessKillSubsystem      — kill blacklisted apps
+    4. ClipboardScrubSubsystem   — clear clipboard
+    5. RightClickSuppressSubsystem — bind right-click handlers
+    6. FullscreenSubsystem       — go fullscreen + hide taskbar
+    7. FocusMonitorSubsystem     — monitor focus
+    8. MouseBoundarySubsystem    — clip cursor last (after fullscreen)
+
+Shutdown order is reversed (mouse released before fullscreen reverts).
 """
 
 from __future__ import annotations
@@ -70,7 +82,7 @@ class LockdownManager:
         The Tk root window (exam taking screen's top-level).
     report_violation : callable
         Callback with signature (type, severity, description, **forensics).
-        Provided by the exam taking screen (Part 17).
+        Used for direct incident posting (lifecycle events).
     shutdown_event : threading.Event, optional
         Shared event for signalling shutdown to subsystems.
         If not provided, a new Event is created.
@@ -92,6 +104,9 @@ class LockdownManager:
         # Track failed subsystems
         self._failed_subsystems: List[str] = []
 
+        # Abort callback — registered by the exam screen at start time
+        self._abort_callback: Optional[Callable[[str], Any]] = None
+
         # Save original handlers for restoration
         self._orig_excepthook: Optional[Any] = None
         self._orig_tk_report_callback_exception: Optional[Any] = None
@@ -101,6 +116,58 @@ class LockdownManager:
     def register(self, subsystem: Any) -> None:
         """Register a subsystem. Must be called before start()."""
         self._subsystems.append(subsystem)
+
+    def register_all(
+        self,
+        window: tk.Tk,
+        shutdown_event: threading.Event,
+    ) -> None:
+        """Register all subsystems in the canonical fixed order.
+
+        Order matters:
+        - MultiMonitor first: abort before going fullscreen
+        - MouseBoundary last: clip after fullscreen is sized
+        - Reverse for shutdown
+        """
+        from client.app.lockdown.clipboard_scrub import ClipboardScrubSubsystem
+        from client.app.lockdown.focus_monitor import FocusMonitorSubsystem
+        from client.app.lockdown.fullscreen import FullscreenSubsystem
+        from client.app.lockdown.keyboard import KeyboardLockdown
+        from client.app.lockdown.mouse_boundary import MouseBoundarySubsystem
+        from client.app.lockdown.multi_monitor import MultiMonitorSubsystem
+        from client.app.lockdown.process_kill import ProcessKillSubsystem
+        from client.app.lockdown.right_click_suppress import RightClickSuppressSubsystem
+
+        self.register(MultiMonitorSubsystem(self, shutdown_event))
+        self.register(KeyboardLockdown(self, shutdown_event))
+        self.register(ProcessKillSubsystem(self, shutdown_event))
+        self.register(ClipboardScrubSubsystem(self, shutdown_event))
+        self._right_click_sub = RightClickSuppressSubsystem(self, window)
+        self.register(self._right_click_sub)
+        self.register(FullscreenSubsystem(self, shutdown_event, window))
+        self.register(FocusMonitorSubsystem(self, shutdown_event, window))
+        self.register(MouseBoundarySubsystem(self, shutdown_event, window))
+
+    def set_abort_callback(self, callback: Callable[[str], Any]) -> None:
+        """Register an abort callback from the exam screen.
+
+        The callback receives a reason string and should handle:
+        stopping the timer, force-submitting or aborting the session,
+        stopping the manager, and navigating to the dashboard.
+        """
+        self._abort_callback = callback
+
+    def request_abort(self, reason: str) -> None:
+        """Request an exam abort from a subsystem.
+
+        Triggers the callback registered by the exam screen.
+        """
+        logger.warning(f"Abort requested by subsystem: {reason}")
+        if self._abort_callback:
+            try:
+                self._abort_callback(reason)
+            except Exception as e:
+                logger.error(f"Abort callback failed: {e}")
 
     # -- Properties ---------------------------------------------------------
 

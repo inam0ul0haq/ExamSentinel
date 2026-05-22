@@ -21,11 +21,9 @@ import threading
 import tkinter as tk
 from typing import Any, Callable, Dict, List, Optional
 
-from client.app.lockdown.clipboard_scrub import ClipboardScrubSubsystem
-from client.app.lockdown.keyboard import KeyboardLockdown
+from client.app.config import SKIP_LOCKDOWN
 from client.app.lockdown.manager import LockdownManager
-from client.app.lockdown.process_kill import ProcessKillSubsystem
-from client.app.lockdown.right_click_suppress import RightClickSuppressSubsystem
+from client.app.services.incident_pipeline import IncidentPipeline
 from client.app.ui import theme
 
 
@@ -92,35 +90,61 @@ class ExamTakingScreen(tk.Frame):
     def start_lockdown(self, on_violation: Callable) -> None:
         """Instantiate and start the LockdownManager.
 
-        Passes the root Tk window and a bound report_violation method.
-        Subsystems registered inside the manager are started in order.
+        Initialises the incident pipeline, registers all subsystems in
+        canonical order via manager.register_all(), then starts.
+        If SKIP_LOCKDOWN is set, logs and skips.
         """
+        if SKIP_LOCKDOWN:
+            import logging
+            logging.getLogger(__name__).warning(
+                "SKIP_LOCKDOWN is set — lockdown will NOT engage."
+            )
+            return
+
         self._on_violation_cb = on_violation
+
+        # Incident pipeline — shared by manager and screen
+        self._pipeline = IncidentPipeline(self._api, self._session_id)
+        self._pipeline.start()
+
         self._lockdown_manager = LockdownManager(
             window=self._root,
-            report_violation=self.report_violation,
+            report_violation=self._pipeline.post,
             shutdown_event=self._shutdown,
         )
-        # Register lockdown subsystems
-        self._lockdown_manager.register(
-            KeyboardLockdown(self._lockdown_manager, self._shutdown)
-        )
-        self._lockdown_manager.register(
-            ProcessKillSubsystem(self._lockdown_manager, self._shutdown)
-        )
-        self._lockdown_manager.register(
-            ClipboardScrubSubsystem(self._lockdown_manager, self._shutdown)
-        )
-        self._right_click_sub = RightClickSuppressSubsystem(
-            self._lockdown_manager, self._root
-        )
-        self._lockdown_manager.register(self._right_click_sub)
+        # Register all subsystems in canonical fixed order
+        self._lockdown_manager.register_all(self._root, self._shutdown)
+        # Set abort callback for multi-monitor / critical abort
+        self._lockdown_manager.set_abort_callback(self._on_lockdown_abort)
         self._lockdown_manager.start()
 
     def stop_lockdown(self) -> None:
         """Stop the lockdown manager. Idempotent — safe to call multiple times."""
+        if hasattr(self, '_pipeline') and self._pipeline is not None:
+            self._pipeline.flush_now()
         if hasattr(self, '_lockdown_manager') and self._lockdown_manager is not None:
             self._lockdown_manager.stop()
+        if hasattr(self, '_pipeline') and self._pipeline is not None:
+            self._pipeline.stop()
+
+    def _on_lockdown_abort(self, reason: str) -> None:
+        """Handle a forced abort from a lockdown subsystem.
+
+        Coordination: flush pipeline → stop manager → POST abort → dashboard.
+        """
+        if hasattr(self, '_pipeline') and self._pipeline:
+            self._pipeline.flush_now()
+        self._cleanup()
+        # Abort session on server
+        self._api.post(
+            f"/sessions/{self._session_id}/abort",
+            body={"reason": reason},
+        )
+        self._root.after(0, lambda: self._router.show(
+            "student_dashboard",
+            push=False,
+            toast=f"Exam aborted: {reason}",
+        ))
 
     # ==================================================================
     # Incident reporting & offline queue

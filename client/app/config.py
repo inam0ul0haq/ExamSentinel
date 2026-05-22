@@ -30,4 +30,8 @@ SKIP_STEALTH_CHECK: bool = os.getenv("SKIP_STEALTH_CHECK", "0").strip().lower() 
     "1", "true", "yes",
 )
 
+SKIP_LOCKDOWN: bool = os.getenv("SKIP_LOCKDOWN", "0").strip().lower() in (
+    "1", "true", "yes",
+)
+
 REQUEST_TIMEOUT_SECONDS: int = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "10"))
