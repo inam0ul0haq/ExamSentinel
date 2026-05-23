@@ -871,7 +871,7 @@ class ExamTakingScreen(tk.Frame):
     def _on_submit_success(self) -> None:
         # Run cleanup in background to avoid blocking GUI (lockdown stop has joins)
         threading.Thread(target=self._cleanup, daemon=True).start()
-        self._show_result_view()
+        self._router.show("student_dashboard", push=False)
 
     def _on_submit_failure(self, msg: str) -> None:
         self._submitted = False
