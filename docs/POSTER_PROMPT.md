@@ -125,7 +125,7 @@ Design a professional academic capstone project poster (2 feet wide × 5 feet ta
 
 (Footer is already defined in section 2 above)
 
-### IMPORTANT DESIGN NOTES:
+### IMPORTANT DESIGN NOTESn:
 - This is a PRINTED poster — text must be readable from 3+ feet
 - Title: 72-96pt, Section headings: 36-48pt, Body text: 24-28pt
 - Use consistent iconography throughout
